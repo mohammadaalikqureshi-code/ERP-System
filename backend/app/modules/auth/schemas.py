@@ -54,3 +54,21 @@ class OTPResponse(BaseModel):
     message: str
     # Present in development only, so you can sign in without an SMS gateway.
     debug_code: Optional[str] = None
+
+
+class ForgotPasswordRequest(BaseModel):
+    email_or_phone: str = Field(..., min_length=3)
+
+
+class ForgotPasswordResponse(BaseModel):
+    sent: bool = True
+    message: str
+    expires_in: int = 600
+    debug_code: Optional[str] = None
+
+
+class ResetPasswordRequest(BaseModel):
+    email_or_phone: str = Field(..., min_length=3)
+    otp: str = Field(..., min_length=4, max_length=8)
+    new_password: str = Field(..., min_length=6)
+

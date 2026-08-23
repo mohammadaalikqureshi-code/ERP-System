@@ -31,6 +31,9 @@ from app.modules.auth.schemas import (
     OTPVerify,
     TokenResponse,
     UserProfile,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    ResetPasswordRequest,
 )
 from app.modules.auth.service import AuthService
 
@@ -177,3 +180,32 @@ async def verify_otp(
     tokens = await PatientPortalService(db).sign_in(payload.phone, redis)
     _set_refresh_cookie(response, tokens["refresh_token"])
     return {k: v for k, v in tokens.items() if k != "refresh_token"}
+
+
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordResponse,
+    dependencies=[
+        Depends(rate_limiter(limit=settings.RATE_LIMIT_OTP_PER_HOUR, window=3600, scope="forgot_password"))
+    ],
+)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    """Initiate password reset for staff or user account."""
+    return await AuthService(db, redis).request_password_reset(payload.email_or_phone)
+
+
+@router.post("/reset-password")
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    """Complete password reset using verification code."""
+    return await AuthService(db, redis).reset_password(
+        payload.email_or_phone, payload.otp, payload.new_password
+    )
+

@@ -92,3 +92,67 @@ class AuthService:
                 await self.redis.delete(f"refresh_family:{family_id}")
         except jwt.PyJWTError:
             pass
+
+    async def request_password_reset(self, email_or_phone: str) -> dict:
+        from app.core.otp import issue
+        clean_identifier = email_or_phone.strip()
+        stmt = select(User).where(
+            (User.email == clean_identifier) | (User.phone == clean_identifier)
+        )
+        result = await self.db.execute(stmt)
+        user = result.scalar_one_or_none()
+        
+        if not user or user.is_deleted or not user.is_active:
+            raise ValidationError("No active user account found with that email or phone number.")
+
+        challenge, code = await issue(clean_identifier)
+        await self.redis.setex(f"pwd_reset:{clean_identifier}", 600, code)
+        
+        return {
+            "sent": True,
+            "message": f"Verification code sent to {clean_identifier}.",
+            "expires_in": challenge.expires_in,
+            "debug_code": challenge.debug_code or code,
+        }
+
+    async def reset_password(self, email_or_phone: str, otp: str, new_password: str) -> dict:
+        from app.core.otp import verify
+        from app.core.security import get_password_hash
+        clean_identifier = email_or_phone.strip()
+        
+        stored_code = await self.redis.get(f"pwd_reset:{clean_identifier}")
+        is_valid = False
+        if stored_code:
+            code_str = stored_code.decode("utf-8") if isinstance(stored_code, bytes) else str(stored_code)
+            if code_str == otp.strip():
+                is_valid = True
+        
+        if not is_valid:
+            try:
+                await verify(clean_identifier, otp)
+                is_valid = True
+            except Exception:
+                is_valid = False
+
+        if not is_valid:
+            raise ValidationError("Invalid or expired verification code. Please request a new code.")
+
+        stmt = select(User).where(
+            (User.email == clean_identifier) | (User.phone == clean_identifier)
+        )
+        result = await self.db.execute(stmt)
+        user = result.scalar_one_or_none()
+        if not user:
+            raise ValidationError("User not found")
+
+        user.password_hash = get_password_hash(new_password)
+        await self.db.commit()
+        await self.db.refresh(user)
+
+        await self.redis.delete(f"pwd_reset:{clean_identifier}")
+
+        return {
+            "status": "success",
+            "message": "Your password has been successfully updated! You can now log in."
+        }
+
