@@ -76,3 +76,34 @@ export const useQueueToday = (doctorId?: string) => {
     },
   });
 };
+
+export const useDoctorTodayAppointments = (doctorId?: string) => {
+  return useQuery({
+    queryKey: ['doctorTodayAppointments', doctorId],
+    queryFn: async () => {
+      const params = doctorId ? { doctorId } : {};
+      const { data } = await apiClient.get<Appointment[]>('/appointments/doctor/today', { params });
+      return data;
+    },
+    refetchInterval: 10000,
+  });
+};
+
+export const useStartNextConsultation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (doctorId?: string) => {
+      const params = doctorId ? { doctorId } : {};
+      const { data } = await apiClient.post<Appointment>('/appointments/doctor/start-next', {}, { params });
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['appointments', data.id] });
+      queryClient.invalidateQueries({ queryKey: ['queue'] });
+      queryClient.invalidateQueries({ queryKey: ['doctorDashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['doctorTodayAppointments'] });
+    },
+  });
+};
+

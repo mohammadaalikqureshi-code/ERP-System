@@ -298,3 +298,121 @@ class AppointmentService:
                 response["waiting"].append(formatted)
                 
         return response
+
+    async def get_doctor_today_appointments(self, clinic_id: uuid.UUID, user_id: uuid.UUID, doctor_id: uuid.UUID = None):
+        """Returns all appointments today for the active doctor."""
+        today = datetime.now(timezone.utc).date()
+        if not doctor_id:
+            doc = (await self.db.execute(select(Doctor).where(Doctor.user_id == user_id, Doctor.clinic_id == clinic_id))).scalar_one_or_none()
+            if doc:
+                doctor_id = doc.id
+            else:
+                doc_first = (await self.db.execute(select(Doctor).where(Doctor.clinic_id == clinic_id).limit(1))).scalar_one_or_none()
+                if doc_first:
+                    doctor_id = doc_first.id
+
+        if not doctor_id:
+            return []
+
+        stmt = select(Appointment).options(
+            selectinload(Appointment.patient),
+            selectinload(Appointment.doctor).selectinload(Doctor.user)
+        ).where(
+            Appointment.clinic_id == clinic_id,
+            Appointment.doctor_id == doctor_id,
+            Appointment.appointment_date == today
+        ).order_by(Appointment.queue_number, Appointment.appointment_time)
+
+        items = (await self.db.execute(stmt)).scalars().all()
+        return [self._format_appointment(item) for item in items]
+
+    async def start_next_consultation(self, clinic_id: uuid.UUID, user_id: uuid.UUID, doctor_id: uuid.UUID = None):
+        """Finds or starts the next consultation for the given doctor/user."""
+        today = datetime.now(timezone.utc).date()
+        
+        # 1. Resolve doctor_id
+        if not doctor_id:
+            doc_stmt = select(Doctor).where(Doctor.user_id == user_id, Doctor.clinic_id == clinic_id)
+            doc_res = await self.db.execute(doc_stmt)
+            doc = doc_res.scalar_one_or_none()
+            if doc:
+                doctor_id = doc.id
+            else:
+                doc_first = (await self.db.execute(select(Doctor).where(Doctor.clinic_id == clinic_id).limit(1))).scalar_one_or_none()
+                if doc_first:
+                    doctor_id = doc_first.id
+
+        if not doctor_id:
+            raise ValidationError("No doctor profile found for current user")
+
+        # 2. Check if a consultation is already in progress
+        in_prog_stmt = select(Appointment).options(
+            selectinload(Appointment.patient),
+            selectinload(Appointment.doctor).selectinload(Doctor.user)
+        ).where(
+            Appointment.clinic_id == clinic_id,
+            Appointment.doctor_id == doctor_id,
+            Appointment.appointment_date == today,
+            Appointment.status.in_(["in_consultation", "IN_CONSULTATION"])
+        ).order_by(Appointment.queue_number)
+        
+        in_prog = (await self.db.execute(in_prog_stmt)).scalar_one_or_none()
+        if in_prog:
+            return self._format_appointment(in_prog)
+
+        # 3. Look for next checked-in patient
+        checked_in_stmt = select(Appointment).options(
+            selectinload(Appointment.patient),
+            selectinload(Appointment.doctor).selectinload(Doctor.user)
+        ).where(
+            Appointment.clinic_id == clinic_id,
+            Appointment.doctor_id == doctor_id,
+            Appointment.appointment_date == today,
+            Appointment.status.in_(["checked_in", "CHECKED_IN"])
+        ).order_by(Appointment.queue_number)
+        
+        next_app = (await self.db.execute(checked_in_stmt)).scalars().first()
+
+        # 4. If none checked-in, look for booked/scheduled patient
+        if not next_app:
+            booked_stmt = select(Appointment).options(
+                selectinload(Appointment.patient),
+                selectinload(Appointment.doctor).selectinload(Doctor.user)
+            ).where(
+                Appointment.clinic_id == clinic_id,
+                Appointment.doctor_id == doctor_id,
+                Appointment.appointment_date == today,
+                Appointment.status.in_(["booked", "BOOKED", "scheduled", "SCHEDULED"])
+            ).order_by(Appointment.queue_number, Appointment.appointment_time)
+            next_app = (await self.db.execute(booked_stmt)).scalars().first()
+
+        if not next_app:
+            raise NotFoundError("No pending appointments or waiting patients found for today.")
+
+        # 5. Transition to in_consultation
+        now = datetime.now(timezone.utc)
+        next_app.status = "in_consultation"
+        next_app.consultation_started_at = now
+        await self.db.commit()
+        await self.db.refresh(next_app)
+
+        # Broadcast live websocket events to waiting room TV & staff
+        await self._announce(clinic_id, Events.APPOINTMENT_STATUS_CHANGED, next_app.id, status="in_consultation", tokenNumber=next_app.token_number)
+
+        try:
+            from app.modules.notifications.service import NotificationService
+            patient_name = next_app.patient.full_name if next_app.patient else "Patient"
+            await NotificationService(self.db).create_and_broadcast(
+                clinic_id=clinic_id,
+                title="Consultation Started",
+                message=f"Token {next_app.token_number} ({patient_name}) called into Doctor OPD consultation room.",
+                category="clinical",
+                target_role="receptionist",
+                sender_name="Doctor OPD",
+                link="/reception/queue",
+            )
+        except Exception:
+            logger.warning("Failed to broadcast start consultation notification", exc_info=True)
+
+        return self._format_appointment(next_app)
+

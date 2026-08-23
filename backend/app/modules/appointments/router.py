@@ -24,6 +24,24 @@ async def create_appointment(
 ):
     return await AppointmentService(db).create_appointment(clinic_id, current_user.id, data)
 
+@router.post("/doctor/start-next", dependencies=[Depends(require_permission("appointments.update"))])
+async def start_next_consultation_endpoint(
+    doctorId: uuid.UUID = None,
+    db: AsyncSession = Depends(get_db),
+    clinic_id: uuid.UUID = Depends(get_clinic_scope),
+    current_user: User = Depends(get_current_active_user)
+):
+    return await AppointmentService(db).start_next_consultation(clinic_id, current_user.id, doctorId)
+
+@router.get("/doctor/today", dependencies=[Depends(require_permission("appointments.read"))])
+async def get_doctor_today_endpoint(
+    doctorId: uuid.UUID = None,
+    db: AsyncSession = Depends(get_db),
+    clinic_id: uuid.UUID = Depends(get_clinic_scope),
+    current_user: User = Depends(get_current_active_user)
+):
+    return await AppointmentService(db).get_doctor_today_appointments(clinic_id, current_user.id, doctorId)
+
 @router.get("/queue", dependencies=[Depends(require_permission("appointments.read"))])
 async def get_queue_endpoint(
     doctorId: uuid.UUID = None,
