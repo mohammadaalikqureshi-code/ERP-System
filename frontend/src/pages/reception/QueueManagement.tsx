@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useQueueToday, useUpdateAppointmentStatus } from '@/api/appointments';
 import { useDoctors } from '@/api/doctors';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,19 +15,16 @@ import { Appointment, Doctor } from '@/types';
 
 const QueueManagementContent = () => {
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>('all');
-  const queryClient = useQueryClient();
   const { toast } = useToast();
   
   const { data: doctors } = useDoctors();
   const { data: queueData, isLoading } = useQueueToday(selectedDoctorId === 'all' ? undefined : selectedDoctorId);
   const { mutate: updateStatus } = useUpdateAppointmentStatus();
 
+  // The useWebSocket hook auto-invalidates React Query keys via EVENT_QUERY_KEYS
+  // in lib/realtime.ts — no manual invalidation needed here.
   const { isConnected, isReconnecting } = useWebSocket({
     url: '/ws/queue',
-    onMessage: () => {
-      // Invalidate query to trigger refetch when websocket sends update
-      queryClient.invalidateQueries({ queryKey: ['queue'] });
-    }
   });
 
   const handleStatusChange = (id: string, status: string) => {

@@ -30,9 +30,27 @@ export const LoginPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [otpStep, setOtpStep] = useState(false);
 
-  const { register, handleSubmit, formState: { errors } } = useHookForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema)
+  const { register, handleSubmit, setValue, formState: { errors } } = useHookForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      identifier: 'admin@medicare-erp.in',
+      password: 'Medicare@2026',
+    }
   });
+
+  const DEMO_ACCOUNTS = [
+    { label: 'Super Admin', email: 'admin@medicare-erp.in', role: 'Platform Admin' },
+    { label: 'Clinic Admin', email: 'neha.kulkarni@sanjeevanihospital.in', role: 'Hospital Admin' },
+    { label: 'Doctor', email: 'meera.raghavan@sanjeevanihospital.in', role: 'Cardiologist' },
+    { label: 'Receptionist', email: 'priya.menon@sanjeevanihospital.in', role: 'Front Desk' },
+    { label: 'Lab Tech', email: 'rakesh.kumar@sanjeevanihospital.in', role: 'Laboratory' },
+    { label: 'Pharmacist', email: 'imran.qureshi@sanjeevanihospital.in', role: 'Pharmacy' },
+  ];
+
+  const fillDemoAccount = (email: string) => {
+    setValue('identifier', email, { shouldValidate: true });
+    setValue('password', 'Medicare@2026', { shouldValidate: true });
+  };
 
   const from = location.state?.from?.pathname || '/';
 
@@ -188,6 +206,29 @@ export const LoginPage: React.FC = () => {
               </div>
             </TabsContent>
           </Tabs>
+
+          <div className="mt-6 pt-6 border-t border-stone-200 dark:border-stone-800">
+            <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3 text-center">
+              Quick Sign-in (Demo Accounts)
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {DEMO_ACCOUNTS.map((acc) => (
+                <button
+                  key={acc.email}
+                  type="button"
+                  onClick={() => fillDemoAccount(acc.email)}
+                  className="flex flex-col items-start p-2.5 rounded-lg border border-stone-200 dark:border-stone-800 hover:border-teal-500 hover:bg-teal-50/50 dark:hover:bg-teal-950/20 text-left transition-all group"
+                >
+                  <span className="text-xs font-semibold text-stone-800 dark:text-stone-200 group-hover:text-teal-600">
+                    {acc.label}
+                  </span>
+                  <span className="text-[10px] text-stone-400 truncate w-full">
+                    {acc.role}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

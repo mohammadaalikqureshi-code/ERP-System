@@ -24,6 +24,9 @@ export const useWebSocket = ({ url, onMessage, enabled = true }: UseWebSocketOpt
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attemptsRef = useRef(0);
   const closedByUs = useRef(false);
+  // Store the callback in a ref so changing it doesn't reconnect the socket.
+  const onMessageRef = useRef(onMessage);
+  onMessageRef.current = onMessage;
 
   const token = useAuthStore((state) => state.accessToken);
   const clinicId = useAuthStore((state) => state.clinicId);
@@ -61,7 +64,7 @@ export const useWebSocket = ({ url, onMessage, enabled = true }: UseWebSocketOpt
       (EVENT_QUERY_KEYS[message.type] ?? []).forEach((key) =>
         queryClient.invalidateQueries({ queryKey: key })
       );
-      onMessage?.(message);
+      onMessageRef.current?.(message);
     };
 
     socket.onclose = () => {
@@ -75,7 +78,7 @@ export const useWebSocket = ({ url, onMessage, enabled = true }: UseWebSocketOpt
     };
 
     socket.onerror = () => socket.close();
-  }, [clinicId, enabled, onMessage, queryClient, token, url]);
+  }, [clinicId, enabled, queryClient, token, url]);
 
   useEffect(() => {
     closedByUs.current = false;

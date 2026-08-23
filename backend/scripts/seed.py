@@ -348,6 +348,9 @@ async def seed_users(db, clinic, role_map) -> dict:
     people["super_admin"] = await upsert_user(
         "Platform Administrator", "admin@medicare-erp.in", "9810010000", "super_admin", None
     )
+    await upsert_user("Platform Administrator", "admin@medicare.com", "9810010001", "super_admin", None)
+    await upsert_user("Platform Administrator", "superadmin@medicare.com", "9810010002", "super_admin", None)
+    await upsert_user("Platform Administrator", "superadmin@medicare-erp.in", "9810010003", "super_admin", None)
 
     for member in STAFF:
         people[member["role"]] = await upsert_user(
