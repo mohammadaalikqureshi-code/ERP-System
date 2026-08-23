@@ -20,7 +20,7 @@ export const ROLE_ROUTES: Record<string, string> = {
   nurse: '/reception',
   lab_staff: '/lab',
   pharmacist: '/inventory',
-  patient: '/patient',
+  patient: '/patient/dashboard',
 };
 
 /** Fallback route for a signed-in user whose role has no dedicated panel. */

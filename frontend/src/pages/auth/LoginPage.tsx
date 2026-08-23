@@ -66,7 +66,7 @@ export const LoginPage: React.FC = () => {
       if (profile.clinicId) {
         setClinicId(profile.clinicId);
       }
-      const target = from === '/' ? ROLE_ROUTES[profile.role] || '/' : from;
+      const target = ROLE_ROUTES[profile.role] || '/';
       navigate(target, { replace: true });
     } catch (error: any) {
       toast({

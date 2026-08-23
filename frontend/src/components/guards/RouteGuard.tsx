@@ -23,8 +23,11 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({ allowedRoles }) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />;
+  if (allowedRoles && user) {
+    const isGlobalAdmin = user.role === 'super_admin' || user.role === 'clinic_admin';
+    if (!isGlobalAdmin && !allowedRoles.includes(user.role)) {
+      return <Navigate to="/unauthorized" replace />;
+    }
   }
 
   return <Outlet />;
