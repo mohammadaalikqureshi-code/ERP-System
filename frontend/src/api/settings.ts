@@ -97,3 +97,104 @@ export const useUpdatePanel = () => {
     },
   });
 };
+
+// --------------------------------------------------------- clinic settings
+export interface ClinicSettings {
+  clinicId: string;
+  gstRate: number;
+  sessionTimeoutMinutes: number;
+  cgstRate: number;
+  sgstRate: number;
+  razorpayKeyId?: string;
+  razorpayKeySecret?: string;
+  smsProvider?: string;
+  smsApiKey?: string;
+  smsSenderId?: string;
+  whatsappEnabled: boolean;
+  autoSmsAppointment: boolean;
+  autoSmsPrescription: boolean;
+  autoSmsLabReport: boolean;
+  ttsEnabled: boolean;
+  ttsLanguage: string;
+}
+
+export interface ClinicBranding {
+  id: string;
+  name: string;
+  tagline?: string;
+  primaryColor?: string;
+  logoUrl?: string;
+  headerImageUrl?: string;
+  footerText?: string;
+  registrationNumber?: string;
+  drugLicenseNumber?: string;
+  gstNumber?: string;
+}
+
+export const useClinicSettings = (clinicId: string) =>
+  useQuery({
+    queryKey: ['clinicSettings', clinicId],
+    queryFn: async () => (await apiClient.get<ClinicSettings>(`/clinics/${clinicId}/settings`)).data,
+    enabled: !!clinicId,
+  });
+
+export const useUpdateClinicSettings = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clinicId, data }: { clinicId: string; data: Partial<ClinicSettings> }) =>
+      (await apiClient.put(`/clinics/${clinicId}/settings`, data)).data,
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['clinicSettings', vars.clinicId] });
+    },
+  });
+};
+
+export const useClinicBranding = (clinicId: string) =>
+  useQuery({
+    queryKey: ['clinicBranding', clinicId],
+    queryFn: async () => (await apiClient.get<ClinicBranding>(`/clinics/${clinicId}`)).data,
+    enabled: !!clinicId,
+  });
+
+export const useUpdateClinicBranding = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clinicId, data }: { clinicId: string; data: Partial<ClinicBranding> }) =>
+      (await apiClient.put(`/clinics/${clinicId}`, data)).data,
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['clinicBranding', vars.clinicId] });
+    },
+  });
+};
+
+// --------------------------------------------------------- billing extras
+export const useDailyCashRegister = (date?: string) =>
+  useQuery({
+    queryKey: ['cashRegister', date],
+    queryFn: async () => {
+      const params = date ? { register_date: date } : {};
+      return (await apiClient.get('/billing/cash-register', { params })).data;
+    },
+  });
+
+export const useCreateRazorpayOrder = () =>
+  useMutation({
+    mutationFn: async (billId: string) =>
+      (await apiClient.post(`/billing/razorpay/create-order/${billId}`)).data,
+  });
+
+export const useVerifyRazorpayPayment = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      bill_id: string;
+      razorpay_order_id: string;
+      razorpay_payment_id: string;
+      razorpay_signature: string;
+    }) => (await apiClient.post('/billing/razorpay/verify', data)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bills'] });
+    },
+  });
+};
+

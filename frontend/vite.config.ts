@@ -10,6 +10,10 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  build: {
+    minify: false,
+    chunkSizeWarningLimit: 2000,
+  },
   server: {
     host: '0.0.0.0',
     port: 5173,

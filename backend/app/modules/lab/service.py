@@ -10,6 +10,40 @@ from app.models.doctor import Doctor
 from app.models.user import User
 from app.modules.lab.schemas import LabTestCatalogCreate, LabTestCatalogUpdate, LabOrderCreate, LabOrderUpdate, LabResultCreate
 from uuid import UUID
+from datetime import datetime, timezone
+
+
+def auto_flag_result(value_str: str, test: LabTestCatalog) -> dict:
+    """Compute flag and is_abnormal based on reference ranges from catalog."""
+    flag = "NORMAL"
+    is_abnormal = False
+    ref_range_display = test.normal_range or ""
+
+    if test.reference_range_min is not None and test.reference_range_max is not None:
+        ref_range_display = f"{test.reference_range_min}-{test.reference_range_max}"
+        if test.unit:
+            ref_range_display += f" {test.unit}"
+
+    try:
+        measured = float(str(value_str).strip())
+    except (ValueError, TypeError):
+        return {"flag": flag, "is_abnormal": False, "reference_range": ref_range_display}
+
+    if test.critical_low is not None and measured < test.critical_low:
+        flag = "CRITICAL_LOW"
+        is_abnormal = True
+    elif test.critical_high is not None and measured > test.critical_high:
+        flag = "CRITICAL_HIGH"
+        is_abnormal = True
+    elif test.reference_range_min is not None and measured < test.reference_range_min:
+        flag = "LOW"
+        is_abnormal = True
+    elif test.reference_range_max is not None and measured > test.reference_range_max:
+        flag = "HIGH"
+        is_abnormal = True
+
+    return {"flag": flag, "is_abnormal": is_abnormal, "reference_range": ref_range_display}
+
 
 class LabService:
     @staticmethod
@@ -23,7 +57,12 @@ class LabService:
             "price": float(test.price),
             "normal_range": test.normal_range,
             "normalRange": test.normal_range,
-            "unit": "mg/dL" if "Sugar" in test.test_name else ""
+            "unit": test.unit or "",
+            "referenceRangeMin": test.reference_range_min,
+            "referenceRangeMax": test.reference_range_max,
+            "criticalLow": test.critical_low,
+            "criticalHigh": test.critical_high,
+            "method": test.method,
         }
 
     @staticmethod
@@ -42,12 +81,15 @@ class LabService:
                 "id": str(r.id),
                 "labTestId": str(r.test_id),
                 "test": test_obj,
-                "testName": test_obj["name"],
+                "testName": test_obj.get("name") or test_obj.get("test_name", ""),
                 "resultValue": r.result_value or "",
-                "isAbnormal": False,
+                "isAbnormal": r.is_abnormal or False,
+                "flag": r.flag or "NORMAL",
+                "referenceRange": r.reference_range or test_obj.get("normalRange", ""),
+                "unit": r.unit or test_obj.get("unit", ""),
                 "remarks": r.remarks or "",
                 "normalRange": test_obj.get("normalRange"),
-                "unit": test_obj.get("unit")
+                "verifiedAt": str(r.verified_at) if r.verified_at else None,
             })
 
         patient_dict = {
@@ -62,6 +104,12 @@ class LabService:
         if order.doctor and hasattr(order.doctor, 'user') and order.doctor.user:
             doctor_name = order.doctor.user.full_name
 
+        has_abnormal = any(r.is_abnormal for r in (order.results or []) if r.is_abnormal)
+        has_critical = any(
+            r.flag in ("CRITICAL_HIGH", "CRITICAL_LOW")
+            for r in (order.results or []) if r.flag
+        )
+
         return {
             "id": str(order.id),
             "patientId": str(order.patient_id),
@@ -74,7 +122,9 @@ class LabService:
             "patient": patient_dict,
             "doctor": {"firstName": "Dr.", "lastName": doctor_name},
             "items": items,
-            "results": items
+            "results": items,
+            "hasAbnormal": has_abnormal,
+            "hasCritical": has_critical,
         }
 
     @staticmethod
@@ -159,11 +209,7 @@ class LabService:
 
     @staticmethod
     async def _announce(db: AsyncSession, order: LabOrder, event: str, **data) -> None:
-        """Tell the clinic's screens that a lab order changed.
-
-        The clinic is derived from the patient, since a lab order has no
-        clinic column of its own.
-        """
+        """Tell the clinic's screens that a lab order changed."""
         patient = (await db.execute(
             select(Patient).where(Patient.id == order.patient_id)
         )).scalar_one_or_none()
@@ -185,9 +231,14 @@ class LabService:
                         link="/lab",
                     )
                 elif event == Events.LAB_RESULT_READY:
+                    has_critical = any(
+                        r.flag in ("CRITICAL_HIGH", "CRITICAL_LOW")
+                        for r in (order.results or []) if r.flag
+                    )
+                    title = "⚠️ CRITICAL Lab Results" if has_critical else "Lab Results Ready"
                     await notif_service.create_and_broadcast(
                         clinic_id=patient.clinic_id,
-                        title="Lab Results Ready",
+                        title=title,
                         message=f"Lab test results for Patient {patient.full_name} (Order #{str(order.id)[:8]}) are published.",
                         category="lab",
                         target_role="doctor",
@@ -229,7 +280,10 @@ class LabService:
 
     @staticmethod
     async def submit_order_results(db: AsyncSession, order_id: UUID, items: list) -> dict:
-        stmt = select(LabOrder).options(selectinload(LabOrder.results)).filter(LabOrder.id == order_id)
+        """Submit lab results with automatic abnormal flagging."""
+        stmt = select(LabOrder).options(
+            selectinload(LabOrder.results).selectinload(LabResult.test)
+        ).filter(LabOrder.id == order_id)
         order = (await db.execute(stmt)).scalar_one_or_none()
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
@@ -243,9 +297,34 @@ class LabService:
                     r.result_value = str(val) if val is not None else ""
                     if remarks:
                         r.remarks = remarks
+
+                    # Auto-flag based on reference ranges from the test catalog
+                    if r.test and val:
+                        flag_data = auto_flag_result(str(val), r.test)
+                        r.flag = flag_data["flag"]
+                        r.is_abnormal = flag_data["is_abnormal"]
+                        r.reference_range = flag_data["reference_range"]
+                        r.unit = r.test.unit or ""
+                    
+                    r.verified_at = datetime.now(timezone.utc)
                         
         order.status = "completed"
         await db.commit()
 
         await LabService._announce(db, order, Events.LAB_RESULT_READY)
         return await LabService.get_order(db, order_id)
+
+    @staticmethod
+    async def get_expiring_items(db: AsyncSession, clinic_id: UUID, days: int = 90) -> list:
+        """Get inventory items expiring within the specified number of days."""
+        from app.models.inventory import InventoryItem
+        from datetime import timedelta
+        cutoff = datetime.now(timezone.utc) + timedelta(days=days)
+        stmt = select(InventoryItem).where(
+            InventoryItem.clinic_id == clinic_id,
+            InventoryItem.is_deleted == False,
+            InventoryItem.expiry_date.isnot(None),
+            InventoryItem.expiry_date <= cutoff,
+        ).order_by(InventoryItem.expiry_date)
+        items = (await db.execute(stmt)).scalars().all()
+        return items

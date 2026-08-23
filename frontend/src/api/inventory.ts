@@ -87,3 +87,50 @@ export const useAddTransaction = () => {
     },
   });
 };
+
+// --- Expiry Tracking ---
+export const useExpiringItems = (days: number = 90) =>
+  useQuery({
+    queryKey: ['inventory', 'expiring', days],
+    queryFn: async () => {
+      const { data } = await api.get('/inventory/expiring', { params: { days } });
+      return data as InventoryItem[];
+    },
+  });
+
+// --- Low Stock Alerts ---
+export const useLowStockItems = () =>
+  useQuery({
+    queryKey: ['inventory', 'low-stock'],
+    queryFn: async () => {
+      const { data } = await api.get('/inventory/low-stock');
+      return data as InventoryItem[];
+    },
+  });
+
+// --- Purchase Orders ---
+export const usePurchaseOrders = () =>
+  useQuery({
+    queryKey: ['purchaseOrders'],
+    queryFn: async () => {
+      const { data } = await api.get('/inventory/purchase-orders');
+      return data;
+    },
+  });
+
+export const useGeneratePurchaseOrder = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (supplierName: string = 'Auto-Generated') => {
+      const { data } = await api.post('/inventory/purchase-orders/generate', null, {
+        params: { supplier_name: supplierName },
+      });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchaseOrders'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+};
+

@@ -20,10 +20,25 @@ class ClinicCreate(ClinicBase):
 
 class ClinicUpdate(ClinicBase):
     is_active: Optional[bool] = None
+    # Branding
+    tagline: Optional[str] = None
+    primary_color: Optional[str] = None
+    logo_url: Optional[str] = None
+    header_image_url: Optional[str] = None
+    footer_text: Optional[str] = None
+    registration_number: Optional[str] = None
+    drug_license_number: Optional[str] = None
 
 class ClinicResponse(ClinicBase):
     id: uuid.UUID
     is_active: bool
+    tagline: Optional[str] = None
+    primary_color: Optional[str] = None
+    logo_url: Optional[str] = None
+    header_image_url: Optional[str] = None
+    footer_text: Optional[str] = None
+    registration_number: Optional[str] = None
+    drug_license_number: Optional[str] = None
     model_config = {"from_attributes": True}
 
 class HolidayBase(BaseModel):
@@ -41,6 +56,23 @@ class HolidayResponse(HolidayBase):
 class ClinicSettingsBase(BaseModel):
     gst_rate: Decimal = Field(default=18.0)
     session_timeout_minutes: int = Field(default=30)
+    # Split GST
+    cgst_rate: Optional[Decimal] = Field(default=9.0)
+    sgst_rate: Optional[Decimal] = Field(default=9.0)
+    # Payment gateway
+    razorpay_key_id: Optional[str] = None
+    razorpay_key_secret: Optional[str] = None
+    # SMS
+    sms_provider: Optional[str] = None
+    sms_api_key: Optional[str] = None
+    sms_sender_id: Optional[str] = None
+    whatsapp_enabled: Optional[bool] = False
+    auto_sms_appointment: Optional[bool] = True
+    auto_sms_prescription: Optional[bool] = True
+    auto_sms_lab_report: Optional[bool] = True
+    # TTS
+    tts_enabled: Optional[bool] = True
+    tts_language: Optional[str] = "en-IN"
 
 class ClinicSettingsUpdate(ClinicSettingsBase):
     pass

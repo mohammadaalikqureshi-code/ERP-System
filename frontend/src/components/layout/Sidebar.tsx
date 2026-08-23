@@ -13,6 +13,7 @@ import {
   ListOrdered,
   LogOut,
   Receipt,
+  Settings,
   Shield,
   SlidersHorizontal,
   UserCog,
@@ -62,6 +63,7 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
     { icon: SlidersHorizontal, label: 'Panels', path: '/admin/panels' },
     { icon: KeyRound, label: 'API Keys', path: '/admin/api-keys' },
     { icon: Shield, label: 'Audit Logs', path: '/admin/audit' },
+    { icon: Settings, label: 'Clinic Settings', path: '/admin/settings' },
   ],
   clinic_admin: [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin' },
@@ -72,6 +74,7 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
     { icon: Bot, label: 'AI Assistant', path: '/admin/ai', panel: 'ai_assistant' },
     { icon: SlidersHorizontal, label: 'Panels', path: '/admin/panels' },
     { icon: KeyRound, label: 'API Keys', path: '/admin/api-keys' },
+    { icon: Settings, label: 'Clinic Settings', path: '/admin/settings' },
   ],
   pharmacist: [{ icon: LayoutDashboard, label: 'Inventory', path: '/inventory', panel: 'inventory' }],
   lab_staff: [{ icon: LayoutDashboard, label: 'Lab Dashboard', path: '/lab', panel: 'lab' }],

@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, cast, Date
 from sqlalchemy.orm import selectinload
 from app.models.billing import Bill, Payment
 from app.models.clinic import ClinicSettings
@@ -14,7 +14,7 @@ from app.documents.templates import receipt_html
 from app.websockets.events import Events, build, room_for_clinic
 from app.websockets.queue_manager import manager
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date as date_type
 from decimal import Decimal
 
 class BillingService:
@@ -61,20 +61,29 @@ class BillingService:
             "discount_amount": bill.discount_amount,
             "discount": bill.discount_amount,
             "gst_amount": bill.gst_amount,
+            "cgst_amount": bill.cgst_amount,
+            "sgst_amount": bill.sgst_amount,
             "total_amount": bill.total_amount,
             "totalAmount": bill.total_amount,
             "payment_status": bill.payment_status,
             "status": bill.payment_status,
+            "payment_mode": bill.payment_mode,
+            "razorpay_order_id": bill.razorpay_order_id,
+            "razorpay_payment_id": bill.razorpay_payment_id,
+            "hsn_sac_code": bill.hsn_sac_code,
+            "notes": bill.notes,
             "patient": patient_dict,
             "created_at": bill.created_at,
             "createdAt": bill.created_at
         }
 
     async def create_bill(self, clinic_id: uuid.UUID, user_id: uuid.UUID, data: BillCreate):
-        # 1. Get Clinic Settings for GST
+        # 1. Get Clinic Settings for GST (split CGST/SGST)
         stmt = select(ClinicSettings).where(ClinicSettings.clinic_id == clinic_id)
         settings = (await self.db.execute(stmt)).scalar_one_or_none()
         gst_rate = Decimal(str(settings.gst_rate)) if settings else Decimal('18.0')
+        cgst_rate = Decimal(str(settings.cgst_rate)) if settings and settings.cgst_rate else gst_rate / 2
+        sgst_rate = Decimal(str(settings.sgst_rate)) if settings and settings.sgst_rate else gst_rate / 2
 
         # 2. Extract inputs
         patient_id = data.patientId or data.patient_id
@@ -86,7 +95,7 @@ class BillingService:
         bill_type = data.bill_type or "consultation"
         payment_mode = data.paymentMode or data.payment_mode or "CASH"
 
-        # 3. Calculate amounts and validate items
+        # 3. Calculate amounts with CGST/SGST split
         formatted_items = []
         subtotal = Decimal('0')
         for item in raw_items:
@@ -98,14 +107,17 @@ class BillingService:
                 "quantity": item.quantity,
                 "unit_price": float(unit_price),
                 "unitPrice": float(unit_price),
-                "amount": float(amount)
+                "amount": float(amount),
+                "hsn_code": getattr(item, 'hsn_code', None) or "",
             })
 
         if discount_amount > subtotal:
             raise ValidationError("Discount cannot exceed subtotal")
             
         taxable_amount = subtotal - discount_amount
-        gst_amount = taxable_amount * (gst_rate / Decimal('100'))
+        cgst_amount = taxable_amount * (cgst_rate / Decimal('100'))
+        sgst_amount = taxable_amount * (sgst_rate / Decimal('100'))
+        gst_amount = cgst_amount + sgst_amount
         total_amount = taxable_amount + gst_amount
 
         bill_number = await self._generate_bill_number(clinic_id)
@@ -120,10 +132,13 @@ class BillingService:
             subtotal=subtotal,
             discount_amount=discount_amount,
             gst_amount=gst_amount,
+            cgst_amount=cgst_amount,
+            sgst_amount=sgst_amount,
             total_amount=total_amount,
             payment_mode=payment_mode.lower(),
             payment_status="paid",
-            created_by=user_id
+            created_by=user_id,
+            hsn_sac_code=getattr(data, 'hsn_sac_code', None) or "9993",
         )
         self.db.add(bill)
         await self.db.flush()
@@ -161,6 +176,20 @@ class BillingService:
                 sender_user_id=user_id,
                 link="/reception/billing",
             )
+        except Exception:
+            pass
+
+        # Send payment SMS
+        try:
+            from app.core.sms_gateway import SMSGateway
+            if reloaded.patient and reloaded.patient.mobile:
+                gateway = await SMSGateway.for_clinic(self.db, clinic_id)
+                await gateway.send_payment_receipt(
+                    reloaded.patient.mobile,
+                    reloaded.patient.full_name,
+                    float(total_amount),
+                    bill_number,
+                )
         except Exception:
             pass
 
@@ -242,7 +271,7 @@ class BillingService:
         return payment
 
     async def generate_receipt_pdf(self, clinic_id: uuid.UUID, bill_id: uuid.UUID) -> bytes:
-        """Render the GST receipt for a bill as a real PDF."""
+        """Render the GST receipt for a bill as a real PDF with CGST/SGST split."""
         bill = (await self.db.execute(
             select(Bill).options(selectinload(Bill.patient)).where(
                 Bill.id == bill_id, Bill.clinic_id == clinic_id
@@ -276,9 +305,68 @@ class BillingService:
                 "subtotal": bill.subtotal,
                 "discount_amount": bill.discount_amount,
                 "gst_amount": bill.gst_amount,
+                "cgst_amount": bill.cgst_amount or 0,
+                "sgst_amount": bill.sgst_amount or 0,
                 "total_amount": bill.total_amount,
                 "payment_status": bill.payment_status,
                 "payment_mode": bill.payment_mode,
+                "hsn_sac_code": bill.hsn_sac_code,
             },
         )
         return render_pdf(html)
+
+    async def daily_cash_register(self, clinic_id: uuid.UUID, register_date: date_type = None) -> dict:
+        """Generate a daily cash register / shift closing report."""
+        target_date = register_date or date_type.today()
+
+        # All bills for the day
+        stmt = select(Bill).where(
+            Bill.clinic_id == clinic_id,
+            cast(Bill.created_at, Date) == target_date,
+        )
+        bills = (await self.db.execute(stmt)).scalars().all()
+
+        # All payments for the day
+        payment_stmt = select(Payment).join(Bill).where(
+            Bill.clinic_id == clinic_id,
+            cast(Payment.paid_at, Date) == target_date,
+            Payment.status == "success",
+        )
+        payments = (await self.db.execute(payment_stmt)).scalars().all()
+
+        # Aggregate by payment mode
+        mode_totals = {}
+        for p in payments:
+            mode = (p.mode or "cash").upper()
+            mode_totals[mode] = mode_totals.get(mode, 0) + float(p.amount or 0)
+
+        total_revenue = sum(mode_totals.values())
+        total_bills = len(bills)
+        paid_count = sum(1 for b in bills if b.payment_status == "paid")
+        pending_count = sum(1 for b in bills if b.payment_status == "pending")
+        total_gst = sum(float(b.gst_amount or 0) for b in bills)
+        total_discount = sum(float(b.discount_amount or 0) for b in bills)
+
+        return {
+            "date": target_date.isoformat(),
+            "clinicId": str(clinic_id),
+            "totalBills": total_bills,
+            "paidBills": paid_count,
+            "pendingBills": pending_count,
+            "totalRevenue": round(total_revenue, 2),
+            "totalGST": round(total_gst, 2),
+            "totalDiscount": round(total_discount, 2),
+            "byPaymentMode": mode_totals,
+            "breakdown": [
+                {
+                    "billNumber": b.bill_number,
+                    "billType": b.bill_type,
+                    "total": float(b.total_amount or 0),
+                    "gst": float(b.gst_amount or 0),
+                    "status": b.payment_status,
+                    "mode": (b.payment_mode or "cash").upper(),
+                    "time": str(b.created_at),
+                }
+                for b in bills
+            ],
+        }

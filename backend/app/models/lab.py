@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, ForeignKey, Float
+from sqlalchemy import Column, String, ForeignKey, Float, Boolean, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
@@ -10,6 +10,13 @@ class LabTestCatalog(BaseModel):
     category = Column(String, nullable=False) # e.g., Hematology, Biochemistry
     price = Column(Float, nullable=False)
     normal_range = Column(String, nullable=True)
+    # Reference range for auto-flagging
+    unit = Column(String, nullable=True)  # mg/dL, mmol/L, g/dL, etc.
+    reference_range_min = Column(Float, nullable=True)
+    reference_range_max = Column(Float, nullable=True)
+    critical_low = Column(Float, nullable=True)
+    critical_high = Column(Float, nullable=True)
+    method = Column(String, nullable=True)
 
     clinic = relationship("Clinic")
 
@@ -31,6 +38,13 @@ class LabResult(BaseModel):
     test_id = Column(UUID(as_uuid=True), ForeignKey("lab_test_catalog.id"), nullable=False)
     result_value = Column(String, nullable=True)
     remarks = Column(String, nullable=True)
+    # Auto-flagging columns
+    unit = Column(String, nullable=True)
+    reference_range = Column(String, nullable=True)
+    flag = Column(String, nullable=True)  # NORMAL, HIGH, LOW, CRITICAL_HIGH, CRITICAL_LOW
+    is_abnormal = Column(Boolean, default=False)
+    verified_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
 
     order = relationship("LabOrder", back_populates="results")
     test = relationship("LabTestCatalog")

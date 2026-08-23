@@ -13,13 +13,16 @@ from app.documents.pdf import clean, money
 def _header(clinic: Dict, title: str, reference: str, issued_on: Optional[str] = None) -> str:
     issued = issued_on or datetime.now().strftime("%d/%m/%Y %I:%M %p")
     gst = f"<p class='clinic-meta'>GSTIN: {clean(clinic.get('gst_number'))}</p>" if clinic.get("gst_number") else ""
+    reg = f"<p class='clinic-meta'>Reg: {clean(clinic.get('registration_number'))}</p>" if clinic.get("registration_number") else ""
     return f"""
     <div class="header">
       <div>
         <p class="clinic-name">{clean(clinic.get('name'))}</p>
+        {f"<p class='clinic-meta' style='font-style:italic;'>{clean(clinic.get('tagline'))}</p>" if clinic.get('tagline') else ""}
         <p class="clinic-meta">{clean(clinic.get('address'))}</p>
         <p class="clinic-meta">Phone: {clean(clinic.get('phone'))} &nbsp;|&nbsp; {clean(clinic.get('email'))}</p>
         {gst}
+        {reg}
       </div>
       <div>
         <p class="doc-title">{clean(title)}</p>
@@ -66,16 +69,29 @@ def prescription_html(
         or "<tr><td colspan='6' class='note'>No medicines prescribed.</td></tr>"
     )
 
+    diagnosis = (
+        f"<h2 class='section'>Diagnosis</h2><p>{clean(prescription.get('diagnosis'))}</p>"
+        if prescription.get("diagnosis")
+        else ""
+    )
+
     notes = (
         f"<h2 class='section'>Advice</h2><p>{clean(prescription.get('notes'))}</p>"
         if prescription.get("notes")
         else ""
     )
 
+    patient_panel = _patient_panel(patient, {
+        "Doctor": doctor.get("name") or "—",
+        "Department": doctor.get("department") or "",
+    })
+
     return f"""
     <html><body>
       {_header(clinic, "Prescription", prescription.get("reference", "—"))}
-      {_patient_panel(patient, {"Doctor": doctor.get("name"), "Department": doctor.get("department")})}
+      {patient_panel}
+
+      {diagnosis}
 
       <h2 class="section">Rx</h2>
       <table>
@@ -93,6 +109,7 @@ def prescription_html(
       <div class="signature">
         <div class="line">{clean(doctor.get('name'))}</div>
         <div style="font-size:9pt;color:#57534e;">{clean(doctor.get('qualification'))}</div>
+        <div style="font-size:8pt;color:#78716c;">{clean(doctor.get('registration_number', ''))}</div>
       </div>
 
       <div class="footer">
@@ -104,7 +121,7 @@ def prescription_html(
 
 
 def receipt_html(clinic: Dict, patient: Dict, bill: Dict) -> str:
-    """A GST receipt for a payment."""
+    """A GST receipt for a payment with CGST/SGST split."""
     rows = (
         "".join(
             f"""
@@ -123,10 +140,28 @@ def receipt_html(clinic: Dict, patient: Dict, bill: Dict) -> str:
     status = str(bill.get("payment_status", "")).upper()
     status_colour = "#15803d" if status == "PAID" else "#b45309"
 
+    cgst = bill.get("cgst_amount") or 0
+    sgst = bill.get("sgst_amount") or 0
+    hsn = bill.get("hsn_sac_code")
+    hsn_row = f"<tr><td style='font-size:8pt;color:#78716c;'>HSN/SAC: {clean(hsn)}</td><td></td></tr>" if hsn else ""
+
+    # Show CGST/SGST split if available, otherwise show combined GST
+    if cgst or sgst:
+        gst_rows = f"""
+        <tr><td>CGST (9%)</td><td class="num">{money(cgst)}</td></tr>
+        <tr><td>SGST (9%)</td><td class="num">{money(sgst)}</td></tr>
+        """
+    else:
+        gst_rows = f'<tr><td>GST</td><td class="num">{money(bill.get("gst_amount"))}</td></tr>'
+
+    patient_panel = _patient_panel(patient, {
+        "Payment": str(bill.get('payment_mode') or '—').upper()
+    })
+
     return f"""
     <html><body>
       {_header(clinic, "Tax Invoice", bill.get("bill_number", "—"))}
-      {_patient_panel(patient, {"Payment": str(bill.get('payment_mode') or '—').upper()})}
+      {patient_panel}
 
       <table>
         <thead>
@@ -141,9 +176,10 @@ def receipt_html(clinic: Dict, patient: Dict, bill: Dict) -> str:
       </table>
 
       <table class="totals">
+        {hsn_row}
         <tr><td>Subtotal</td><td class="num">{money(bill.get('subtotal'))}</td></tr>
         <tr><td>Discount</td><td class="num">- {money(bill.get('discount_amount'))}</td></tr>
-        <tr><td>GST</td><td class="num">{money(bill.get('gst_amount'))}</td></tr>
+        {gst_rows}
         <tr class="grand"><td>Total</td><td class="num">{money(bill.get('total_amount'))}</td></tr>
       </table>
 
@@ -169,13 +205,15 @@ def lab_report_html(
           <td>{clean(result.get('test_name'))}</td>
           <td class="{'flag' if result.get('is_abnormal') else ''}">
             {clean(result.get('result_value'))}{' ⚠' if result.get('is_abnormal') else ''}
+            {f" <span style='font-size:8pt;font-weight:bold;color:#b91c1c;'>({result.get('flag')})</span>" if result.get('flag') and result.get('flag') != 'NORMAL' else ''}
           </td>
-          <td>{clean(result.get('normal_range'))}</td>
+          <td>{clean(result.get('unit', ''))}</td>
+          <td>{clean(result.get('normal_range') or result.get('reference_range', ''))}</td>
           <td>{clean(result.get('remarks'))}</td>
         </tr>"""
             for result in results
         )
-        or "<tr><td colspan='4' class='note'>No results recorded.</td></tr>"
+        or "<tr><td colspan='5' class='note'>No results recorded.</td></tr>"
     )
 
     interpretation_block = (
@@ -184,16 +222,22 @@ def lab_report_html(
         else ""
     )
 
+    patient_panel = _patient_panel(patient, {
+        "Referred by": order.get("doctor_name") or "—",
+        "Status": str(order.get("status", "")).replace("_", " ").title(),
+    })
+
     return f"""
     <html><body>
       {_header(clinic, "Laboratory Report", order.get("reference", "—"))}
-      {_patient_panel(patient, {"Referred by": order.get("doctor_name"), "Status": str(order.get("status", "")).replace("_", " ").title()})}
+      {patient_panel}
 
       <table>
         <thead>
           <tr>
-            <th style="width:34%">Test</th><th style="width:20%">Result</th>
-            <th style="width:22%">Reference Range</th><th>Remarks</th>
+            <th style="width:28%">Test</th><th style="width:18%">Result</th>
+            <th style="width:10%">Unit</th>
+            <th style="width:20%">Reference Range</th><th>Remarks</th>
           </tr>
         </thead>
         <tbody>{rows}</tbody>

@@ -65,6 +65,7 @@ export const PAYMENT_MODES = [
   { value: 'CARD', label: 'Card' },
   { value: 'NET_BANKING', label: 'Net Banking' },
   { value: 'INSURANCE', label: 'Insurance' },
+  { value: 'ONLINE', label: 'Online (Razorpay)' },
 ] as const;
 
 export const GENDERS = [

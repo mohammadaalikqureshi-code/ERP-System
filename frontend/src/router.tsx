@@ -28,6 +28,7 @@ const ApiKeysPage = React.lazy(() => import('./pages/admin/ApiKeysPage'));
 const PanelsPage = React.lazy(() => import('./pages/admin/PanelsPage'));
 const AiConsolePage = React.lazy(() => import('./pages/admin/AiConsolePage'));
 const InventoryDashboard = React.lazy(() => import('./pages/inventory/InventoryDashboard'));
+const ClinicSettingsPage = React.lazy(() => import('./pages/admin/ClinicSettingsPage'));
 const ReceptionDashboard = React.lazy(() => import('./pages/reception/ReceptionDashboard'));
 const PatientRegistration = React.lazy(() => import('./pages/reception/PatientRegistration'));
 const PatientSearch = React.lazy(() => import('./pages/reception/PatientSearch'));
@@ -116,6 +117,7 @@ export const router = createBrowserRouter([
           { path: 'ai', element: withSuspense(AiConsolePage) },
           { path: 'panels', element: withSuspense(PanelsPage) },
           { path: 'api-keys', element: withSuspense(ApiKeysPage) },
+          { path: 'settings', element: withSuspense(ClinicSettingsPage) },
         ]
       },
       // Doctor Routes

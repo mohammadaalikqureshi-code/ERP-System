@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, ForeignKey, Numeric, JSON, DateTime
+from sqlalchemy import Column, String, ForeignKey, Numeric, JSON, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel, SoftDeleteMixin
@@ -18,6 +18,15 @@ class Bill(BaseModel, SoftDeleteMixin):
     payment_mode = Column(String, nullable=True) # cash/upi/card/net_banking
     payment_status = Column(String, default="pending") # pending/paid/failed/refunded
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    # GST split
+    cgst_amount = Column(Numeric, default=0)
+    sgst_amount = Column(Numeric, default=0)
+    hsn_sac_code = Column(String, nullable=True)
+    # Payment gateway
+    razorpay_order_id = Column(String, nullable=True)
+    razorpay_payment_id = Column(String, nullable=True)
+    payment_link = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
 
     clinic = relationship("Clinic")
     patient = relationship("Patient")
@@ -33,5 +42,7 @@ class Payment(BaseModel):
     gateway_txn_id = Column(String, nullable=True)
     status = Column(String, nullable=False) # success/pending/failed
     paid_at = Column(DateTime(timezone=True), nullable=True)
+    razorpay_signature = Column(String, nullable=True)
+    receipt_url = Column(String, nullable=True)
 
     bill = relationship("Bill", back_populates="payments")

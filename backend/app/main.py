@@ -68,6 +68,15 @@ async def lifespan(app: FastAPI):
         # Log loudly but still start: an orchestrator's readiness probe should
         # decide whether to route traffic here, not an unexplained crash loop.
         logger.error("Database is not reachable at startup — /ready will report not-ready")
+    else:
+        # Run market-ready migration (idempotent — uses IF NOT EXISTS / IF NOT EXISTS)
+        try:
+            from app.migrations.market_ready import run_migration
+            await run_migration()
+            logger.info("Market-ready migration completed")
+        except Exception:
+            logger.warning("Market-ready migration skipped", exc_info=True)
+
     if not await check_redis():
         logger.error("Redis is not reachable at startup — /ready will report not-ready")
 

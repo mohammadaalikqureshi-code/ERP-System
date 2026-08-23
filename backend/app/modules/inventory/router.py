@@ -56,6 +56,38 @@ async def list_low_stock(
     service = InventoryService(db)
     return await service.list_low_stock(clinic_id)
 
+@router.get("/expiring", dependencies=[Depends(require_permission("inventory.read"))])
+async def list_expiring_items(
+    days: int = Query(90, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+    clinic_id: uuid.UUID = Depends(get_clinic_scope),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get medicines expiring within the specified number of days."""
+    service = InventoryService(db)
+    return await service.list_expiring_items(clinic_id, days)
+
+@router.post("/purchase-orders/generate", dependencies=[Depends(require_permission("inventory.create"))])
+async def generate_purchase_order(
+    supplier_name: str = Query("Auto-Generated"),
+    db: AsyncSession = Depends(get_db),
+    clinic_id: uuid.UUID = Depends(get_clinic_scope),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Auto-generate a purchase order for all items below reorder level."""
+    service = InventoryService(db)
+    return await service.generate_purchase_order(clinic_id, current_user.id, supplier_name)
+
+@router.get("/purchase-orders", dependencies=[Depends(require_permission("inventory.read"))])
+async def list_purchase_orders(
+    db: AsyncSession = Depends(get_db),
+    clinic_id: uuid.UUID = Depends(get_clinic_scope),
+    current_user: User = Depends(get_current_active_user)
+):
+    """List all purchase orders for this clinic."""
+    service = InventoryService(db)
+    return await service.list_purchase_orders(clinic_id)
+
 @router.get("/{item_id}", response_model=InventoryItemResponse, dependencies=[Depends(require_permission("inventory.read"))])
 async def get_item(
     item_id: uuid.UUID,
