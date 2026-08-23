@@ -59,6 +59,7 @@ const RoleRedirect = () => {
     case 'doctor':
       return <Navigate to="/doctor" replace />;
     case 'receptionist':
+    case 'nurse':
       return <Navigate to="/reception" replace />;
     case 'lab_staff':
       return <Navigate to="/lab" replace />;
@@ -120,7 +121,7 @@ export const router = createBrowserRouter([
       // Doctor Routes
       {
         path: 'doctor',
-        element: <RouteGuard allowedRoles={['doctor', 'super_admin', 'clinic_admin']} />,
+        element: <RouteGuard allowedRoles={['doctor', 'super_admin', 'clinic_admin', 'nurse', 'receptionist']} />,
         children: [
           { index: true, element: withSuspense(DoctorDashboard) },
           { path: 'consultation/:appointmentId', element: withSuspense(ConsultationView) },
@@ -130,7 +131,7 @@ export const router = createBrowserRouter([
       // Reception Routes
       {
         path: 'reception',
-        element: <RouteGuard allowedRoles={['receptionist', 'clinic_admin', 'super_admin']} />,
+        element: <RouteGuard allowedRoles={['receptionist', 'nurse', 'doctor', 'clinic_admin', 'super_admin']} />,
         children: [
           { index: true, element: withSuspense(ReceptionDashboard) },
           { path: 'patients', element: withSuspense(PatientRegistration) },
@@ -143,7 +144,7 @@ export const router = createBrowserRouter([
       // Inventory / Pharmacy Routes
       {
         path: 'inventory',
-        element: <RouteGuard allowedRoles={['pharmacist', 'clinic_admin', 'super_admin']} />,
+        element: <RouteGuard allowedRoles={['pharmacist', 'doctor', 'nurse', 'receptionist', 'clinic_admin', 'super_admin']} />,
         children: [
           { index: true, element: withSuspense(InventoryDashboard) },
         ]
@@ -151,7 +152,7 @@ export const router = createBrowserRouter([
       // Lab Routes
       {
         path: 'lab',
-        element: <RouteGuard allowedRoles={['lab_staff', 'clinic_admin', 'super_admin']} />,
+        element: <RouteGuard allowedRoles={['lab_staff', 'doctor', 'nurse', 'receptionist', 'clinic_admin', 'super_admin']} />,
         children: [
           { index: true, element: withSuspense(LabDashboard) },
         ]
@@ -159,7 +160,7 @@ export const router = createBrowserRouter([
       // Patient Routes
       {
         path: 'patient',
-        element: <RouteGuard allowedRoles={['patient']} />,
+        element: <RouteGuard allowedRoles={['patient', 'receptionist', 'nurse', 'doctor', 'clinic_admin', 'super_admin']} />,
         children: [
           { path: 'dashboard', element: withSuspense(PatientDashboard) },
         ]
