@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Bell, Search, User } from 'lucide-react';
+import { Menu, Search, User } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
@@ -13,8 +13,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { BranchSwitcher } from './BranchSwitcher';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 export const Topbar: React.FC = () => {
   const { setSidebarOpen, sidebarOpen } = useUIStore();
@@ -51,10 +51,7 @@ export const Topbar: React.FC = () => {
 
         {user?.role !== 'super_admin' && <BranchSwitcher />}
 
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="w-5 h-5 text-stone-600 dark:text-stone-300" />
-          <Badge className="absolute top-1 right-1 w-2 h-2 p-0 bg-teal-600 rounded-full" variant="default" />
-        </Button>
+        <NotificationBell />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

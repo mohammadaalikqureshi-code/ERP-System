@@ -38,6 +38,10 @@ class Events:
     STOCK_CHANGED = "STOCK_CHANGED"
     STOCK_LOW = "STOCK_LOW"
 
+    # In-App Staff Notifications
+    NOTIFICATION_RECEIVED = "NOTIFICATION_RECEIVED"
+
+
 
 def room_for_clinic(clinic_id: UUID | str) -> str:
     """Staff room: everyone signed in to this clinic."""

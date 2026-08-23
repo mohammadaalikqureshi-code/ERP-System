@@ -13,6 +13,7 @@ COPY . .
 # Defaults to a relative path so the Nginx proxy below handles it.
 ARG VITE_API_BASE_URL=/api/v1
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime

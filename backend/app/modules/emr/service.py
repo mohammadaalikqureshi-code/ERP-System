@@ -84,7 +84,34 @@ class EMRService:
             .options(selectinload(Prescription.items))
             .filter(Prescription.id == db_prescription.id)
         )
-        return result.scalar_one_or_none()
+        saved_pres = result.scalar_one_or_none()
+
+        # Notify Pharmacy
+        try:
+            from app.models.appointment import Appointment
+            from app.modules.notifications.service import NotificationService
+            from app.websockets.events import Events, build, room_for_clinic
+            from app.websockets.queue_manager import manager
+
+            apt = (await db.execute(select(Appointment).where(Appointment.id == db_prescription.appointment_id))).scalar_one_or_none()
+            if apt:
+                await manager.broadcast(
+                    room_for_clinic(apt.clinic_id),
+                    build(Events.PRESCRIPTION_CREATED, entity_id=db_prescription.id)
+                )
+                await NotificationService(db).create_and_broadcast(
+                    clinic_id=apt.clinic_id,
+                    title="New Prescription Issued",
+                    message=f"Prescription with {len(pres_data.items)} medicine(s) prescribed for Token {apt.token_number}.",
+                    category="pharmacy",
+                    target_role="pharmacist",
+                    sender_name="Doctor OPD",
+                    link="/inventory",
+                )
+        except Exception:
+            pass
+
+        return saved_pres
 
     @staticmethod
     async def get_prescription_by_appointment(db: AsyncSession, appointment_id: UUID):

@@ -85,6 +85,22 @@ class AppointmentService:
             token_number=appointment.token_number,
         )
 
+        try:
+            from app.modules.notifications.service import NotificationService
+            await NotificationService(self.db).create_and_broadcast(
+                clinic_id=clinic_id,
+                title="New Appointment Booked",
+                message=f"Appointment booked for Token {appointment.token_number} on {appointment.appointment_date} at {appointment.appointment_time}.",
+                category="appointment",
+                target_role="doctor",
+                target_doctor_id=appointment.doctor_id,
+                sender_name="Front Desk / Reception",
+                sender_user_id=user_id,
+                link="/doctor",
+            )
+        except Exception:
+            logger.warning("Failed to dispatch in-app booking notification", exc_info=True)
+
         return appointment
 
     async def _announce(self, clinic_id, event_type: str, entity_id=None, **data):
@@ -135,6 +151,43 @@ class AppointmentService:
         
         await self._announce(clinic_id, Events.APPOINTMENT_STATUS_CHANGED, app.id, status=app.status)
         
+        try:
+            from app.modules.notifications.service import NotificationService
+            notif_service = NotificationService(self.db)
+            if data.status == "checked_in":
+                await notif_service.create_and_broadcast(
+                    clinic_id=clinic_id,
+                    title="Patient Checked In",
+                    message=f"Patient with Token {app.token_number} is checked in and waiting in the lobby.",
+                    category="clinical",
+                    target_role="doctor",
+                    target_doctor_id=app.doctor_id,
+                    sender_name="Front Desk / Reception",
+                    link="/doctor",
+                )
+            elif data.status == "in_consultation":
+                await notif_service.create_and_broadcast(
+                    clinic_id=clinic_id,
+                    title="Consultation Started",
+                    message=f"Doctor has called Token {app.token_number} into consultation.",
+                    category="clinical",
+                    target_role="receptionist",
+                    sender_name="Doctor OPD",
+                    link="/reception/queue",
+                )
+            elif data.status == "completed":
+                await notif_service.create_and_broadcast(
+                    clinic_id=clinic_id,
+                    title="Consultation Completed",
+                    message=f"Consultation for Token {app.token_number} has concluded.",
+                    category="clinical",
+                    target_role="receptionist",
+                    sender_name="Doctor OPD",
+                    link="/reception/billing",
+                )
+        except Exception:
+            logger.warning("Failed to dispatch status change in-app notification", exc_info=True)
+
         if data.status == "cancelled":
             send_notification_task.delay(str(app.patient_id), "cancelled", {"date": str(app.appointment_date), "time": str(app.appointment_time), "doctor": "Dr."})
         

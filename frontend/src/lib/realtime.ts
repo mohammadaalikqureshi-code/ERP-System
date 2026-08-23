@@ -34,6 +34,8 @@ export const EVENT_QUERY_KEYS: Record<string, string[][]> = {
 
   STOCK_CHANGED: [['inventory']],
   STOCK_LOW: [['inventory'], ['lowStock']],
+
+  NOTIFICATION_RECEIVED: [['inbox-notifications']],
 };
 
 /** Events worth showing the user a toast for, with the message to show. */

@@ -144,6 +144,7 @@ class LabService:
             db.add(db_result)
             
         await db.commit()
+        await LabService._announce(db, db_order, Events.LAB_ORDER_CREATED)
         
         result = await db.execute(
             select(LabOrder)
@@ -170,6 +171,32 @@ class LabService:
             await manager.broadcast(
                 room_for_clinic(patient.clinic_id), build(event, order.id, **data)
             )
+            try:
+                from app.modules.notifications.service import NotificationService
+                notif_service = NotificationService(db)
+                if event == Events.LAB_ORDER_CREATED:
+                    await notif_service.create_and_broadcast(
+                        clinic_id=patient.clinic_id,
+                        title="New Lab Order Placed",
+                        message=f"Lab test order #{str(order.id)[:8]} requested for Patient {patient.full_name}.",
+                        category="lab",
+                        target_role="lab_staff",
+                        sender_name="Doctor OPD",
+                        link="/lab",
+                    )
+                elif event == Events.LAB_RESULT_READY:
+                    await notif_service.create_and_broadcast(
+                        clinic_id=patient.clinic_id,
+                        title="Lab Results Ready",
+                        message=f"Lab test results for Patient {patient.full_name} (Order #{str(order.id)[:8]}) are published.",
+                        category="lab",
+                        target_role="doctor",
+                        target_doctor_id=order.doctor_id,
+                        sender_name="Diagnostic Lab",
+                        link="/lab",
+                    )
+            except Exception:
+                pass
 
     @staticmethod
     async def get_order(db: AsyncSession, order_id: UUID) -> dict:

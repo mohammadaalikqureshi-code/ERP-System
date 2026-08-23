@@ -147,6 +147,23 @@ class BillingService:
             room_for_clinic(clinic_id),
             build(Events.BILL_CREATED, bill.id, total=float(bill.total_amount)),
         )
+
+        try:
+            from app.modules.notifications.service import NotificationService
+            patient_name = reloaded.patient.full_name if reloaded.patient else "Patient"
+            await NotificationService(self.db).create_and_broadcast(
+                clinic_id=clinic_id,
+                title="Invoice & Payment Settled",
+                message=f"Bill #{bill.bill_number} for ₹{float(bill.total_amount):.2f} generated for {patient_name}.",
+                category="billing",
+                target_role="clinic_admin",
+                sender_name="Billing Desk",
+                sender_user_id=user_id,
+                link="/reception/billing",
+            )
+        except Exception:
+            pass
+
         return self._format_bill(reloaded)
 
     async def get_bill(self, clinic_id: uuid.UUID, bill_id: uuid.UUID):

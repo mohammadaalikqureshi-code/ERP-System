@@ -316,3 +316,27 @@ export interface LabOrderItem {
   remarks: string;
   test?: LabTest;
 }
+
+export interface AppNotification {
+  id: string;
+  clinicId: string;
+  senderUserId?: string | null;
+  senderName: string;
+  targetRole: string;
+  targetUserId?: string | null;
+  targetDoctorId?: string | null;
+  category: 'appointment' | 'clinical' | 'lab' | 'pharmacy' | 'billing' | 'urgent' | 'general' | string;
+  title: string;
+  message: string;
+  link?: string | null;
+  isRead: boolean;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface AppNotificationInbox {
+  items: AppNotification[];
+  unreadCount: number;
+  total: number;
+}
+
