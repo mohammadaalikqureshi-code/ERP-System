@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useForm as useHookForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -447,6 +447,17 @@ export const LoginPage: React.FC = () => {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Register New Hospital CTA */}
+          <div className="mt-5 pt-4 border-t border-stone-200 dark:border-stone-800 text-center">
+            <Link
+              to="/register"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors"
+            >
+              <span>🏥 New Hospital or Clinic? Start 14-Day Free Trial</span>
+              <span>→</span>
+            </Link>
           </div>
         </div>
       </div>
