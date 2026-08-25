@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Edit2, Users, Sparkles, Wand2, Copy, Check, ShieldCheck, Lock, Crown, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Users, Sparkles, Wand2, Copy, Check, ShieldCheck, Lock, Crown, AlertCircle, FlaskConical } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 
 const useStaff = (role?: string) => {
@@ -80,7 +80,7 @@ const StaffPageContent = () => {
     setEditingStaff(null);
     setFirstName('');
     setLastName('');
-    setRole('receptionist');
+    setRole(activeTab !== 'ALL' ? activeTab : 'receptionist');
     setGeneratedEmail('');
     setGeneratedPassword(`Staff@${Math.floor(1000 + Math.random() * 9000)}`);
     setIsOpen(true);
@@ -90,7 +90,7 @@ const StaffPageContent = () => {
     setEditingStaff(staff);
     setFirstName(staff.firstName || '');
     setLastName(staff.lastName || '');
-    setRole(staff.role || 'receptionist');
+    setRole(staff.role?.toLowerCase() === 'lab_technician' ? 'lab_staff' : (staff.role?.toLowerCase() || 'receptionist'));
     setGeneratedEmail(staff.email || '');
     setIsOpen(true);
   };
@@ -102,7 +102,8 @@ const StaffPageContent = () => {
       toast({ title: "Please enter First Name first", variant: "destructive" });
       return;
     }
-    const email = l ? `${f}.${l}@sanjeevanihospital.in` : `${f}.${role.toLowerCase()}@sanjeevanihospital.in`;
+    const roleSlug = role === 'lab_staff' ? 'lab' : role.toLowerCase();
+    const email = l ? `${f}.${l}@sanjeevanihospital.in` : `${f}.${roleSlug}@sanjeevanihospital.in`;
     setGeneratedEmail(email);
     toast({ title: "Hospital Email Generated", description: email });
   };
@@ -125,7 +126,7 @@ const StaffPageContent = () => {
     const payload = {
       firstName: (formData.get('firstName') as string)?.trim(),
       lastName: (formData.get('lastName') as string)?.trim(),
-      email: generatedEmail || (formData.get('email') as string),
+      email: (generatedEmail || (formData.get('email') as string))?.trim()?.toLowerCase(),
       phone: formData.get('phone') as string,
       role: role,
       password: generatedPassword,
@@ -138,24 +139,44 @@ const StaffPageContent = () => {
     }
   };
 
+  const getRoleBadge = (roleName: string) => {
+    const r = roleName?.toLowerCase();
+    if (r === 'lab_staff' || r === 'lab_technician') {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full font-bold uppercase bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+          <FlaskConical className="h-3 w-3" /> Lab Technician
+        </span>
+      );
+    }
+    if (r === 'receptionist') {
+      return <span className="text-xs px-2.5 py-0.5 rounded-full font-bold uppercase bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300">Receptionist</span>;
+    }
+    if (r === 'pharmacist') {
+      return <span className="text-xs px-2.5 py-0.5 rounded-full font-bold uppercase bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Pharmacist</span>;
+    }
+    if (r === 'nurse') {
+      return <span className="text-xs px-2.5 py-0.5 rounded-full font-bold uppercase bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">Nurse</span>;
+    }
+    if (r === 'clinic_admin') {
+      return <span className="text-xs px-2.5 py-0.5 rounded-full font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Clinic Admin</span>;
+    }
+    return <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold uppercase bg-muted text-muted-foreground">{roleName}</span>;
+  };
+
   const columns = [
     { key: 'name', title: 'Staff Member', render: (_: any, row: any) => (
       <div className="flex items-center gap-2.5">
         <div className="h-8 w-8 rounded-full bg-teal-100 dark:bg-teal-900/30 text-teal-700 flex items-center justify-center font-bold text-xs">
-          {row.firstName?.charAt(0) || 'U'}
+          {row.firstName?.charAt(0) || row.full_name?.charAt(0) || 'U'}
         </div>
         <div>
-          <div className="font-semibold text-foreground">{row.firstName} {row.lastName}</div>
+          <div className="font-semibold text-foreground">{row.full_name || `${row.firstName} ${row.lastName}`}</div>
           <div className="text-[11px] text-muted-foreground font-mono">{row.email}</div>
         </div>
       </div>
     ) },
-    { key: 'phone', title: 'Phone Number' },
-    { key: 'role', title: 'Department Role', render: (val: string) => (
-      <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold uppercase bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300">
-        {val?.replace('_', ' ')}
-      </span>
-    ) },
+    { key: 'phone', title: 'Phone Number', render: (val: string) => val || '—' },
+    { key: 'role', title: 'Department Role', render: (val: string) => getRoleBadge(val) },
     { key: 'isActive', title: 'Status', render: (val: boolean) => (
       <span className={`px-2 py-0.5 rounded text-xs font-semibold ${val !== false ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-800'}`}>
         {val !== false ? 'Active' : 'Suspended'}
@@ -206,9 +227,9 @@ const StaffPageContent = () => {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
           <TabsTrigger value="ALL">All Staff</TabsTrigger>
+          <TabsTrigger value="lab_staff">Lab Technicians</TabsTrigger>
           <TabsTrigger value="receptionist">Receptionists</TabsTrigger>
           <TabsTrigger value="pharmacist">Pharmacists</TabsTrigger>
-          <TabsTrigger value="lab_technician">Lab Technicians</TabsTrigger>
           <TabsTrigger value="nurse">Nurses</TabsTrigger>
         </TabsList>
 
@@ -250,10 +271,11 @@ const StaffPageContent = () => {
                     if (!editingStaff) {
                       const f = e.target.value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
                       const l = lastName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-                      if (f) setGeneratedEmail(l ? `${f}.${l}@sanjeevanihospital.in` : `${f}.${role.toLowerCase()}@sanjeevanihospital.in`);
+                      const roleSlug = role === 'lab_staff' ? 'lab' : role.toLowerCase();
+                      if (f) setGeneratedEmail(l ? `${f}.${l}@sanjeevanihospital.in` : `${f}.${roleSlug}@sanjeevanihospital.in`);
                     }
                   }}
-                  placeholder="e.g. Priya"
+                  placeholder="e.g. Mohammad"
                   required 
                 />
               </div>
@@ -269,10 +291,11 @@ const StaffPageContent = () => {
                     if (!editingStaff) {
                       const f = firstName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
                       const l = e.target.value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-                      if (f) setGeneratedEmail(l ? `${f}.${l}@sanjeevanihospital.in` : `${f}.${role.toLowerCase()}@sanjeevanihospital.in`);
+                      const roleSlug = role === 'lab_staff' ? 'lab' : role.toLowerCase();
+                      if (f) setGeneratedEmail(l ? `${f}.${l}@sanjeevanihospital.in` : `${f}.${roleSlug}@sanjeevanihospital.in`);
                     }
                   }}
-                  placeholder="e.g. Menon"
+                  placeholder="e.g. Qureshi"
                   required 
                 />
               </div>
@@ -290,17 +313,18 @@ const StaffPageContent = () => {
                   if (!editingStaff && firstName) {
                     const f = firstName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
                     const l = lastName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-                    setGeneratedEmail(l ? `${f}.${l}@sanjeevanihospital.in` : `${f}.${e.target.value.toLowerCase()}@sanjeevanihospital.in`);
+                    const roleSlug = e.target.value === 'lab_staff' ? 'lab' : e.target.value.toLowerCase();
+                    setGeneratedEmail(l ? `${f}.${l}@sanjeevanihospital.in` : `${f}.${roleSlug}@sanjeevanihospital.in`);
                   }
                 }}
                 className="w-full h-10 px-3 border rounded-md bg-background text-sm"
                 required
               >
-                <option value="receptionist">Receptionist (Front Desk, Tokens & Billing)</option>
-                <option value="pharmacist">Pharmacist (Medicine Inventory & Dispensing)</option>
-                <option value="lab_technician">Lab Technician (Diagnostics & Test Results)</option>
-                <option value="nurse">Nurse (Patient Vitals & Care)</option>
-                <option value="clinic_admin">Clinic Administrator (Full Hospital Access)</option>
+                <option value="lab_staff">🧪 Lab Technician (Diagnostics, Test Catalog & Results)</option>
+                <option value="receptionist">📋 Receptionist (Front Desk, Tokens & Billing)</option>
+                <option value="pharmacist">💊 Pharmacist (Medicine Inventory & Dispensing)</option>
+                <option value="nurse">🩺 Nurse (Patient Vitals & Care)</option>
+                <option value="clinic_admin">🏥 Clinic Administrator (Full Hospital Access)</option>
               </select>
             </div>
 
@@ -330,7 +354,7 @@ const StaffPageContent = () => {
                 value={generatedEmail}
                 disabled={!isSuperAdmin}
                 onChange={(e) => setGeneratedEmail(e.target.value)}
-                placeholder="priya.menon@sanjeevanihospital.in" 
+                placeholder="mohammad.qureshi@sanjeevanihospital.in" 
                 className="bg-background text-sm h-9 font-mono"
                 required 
               />
