@@ -17,6 +17,7 @@ const ClinicsPage = React.lazy(() => import('./pages/admin/ClinicsPage'));
 const DoctorsPage = React.lazy(() => import('./pages/admin/DoctorsPage'));
 const StaffPage = React.lazy(() => import('./pages/admin/StaffPage'));
 const AuditLogsPage = React.lazy(() => import('./pages/admin/AuditLogsPage'));
+const BackupPage = React.lazy(() => import('./pages/admin/BackupPage'));
 const QueueDisplay = React.lazy(() => import('./pages/public/QueueDisplay'));
 const LabDashboard = React.lazy(() => import('./pages/lab/LabDashboard'));
 const UnauthorizedPage = React.lazy(() => import('./pages/errors/UnauthorizedPage').then(m => ({ default: m.UnauthorizedPage })));
@@ -131,6 +132,7 @@ export const router = createBrowserRouter([
           { path: 'doctors', element: withSuspense(DoctorsPage) },
           { path: 'staff', element: withSuspense(StaffPage) },
           { path: 'audit', element: withSuspense(AuditLogsPage) },
+          { path: 'backup', element: withSuspense(BackupPage) },
           { path: 'reports', element: withSuspense(ReportsPage) },
           { path: 'ai', element: withSuspense(AiConsolePage) },
           { path: 'panels', element: withSuspense(PanelsPage) },

@@ -53,6 +53,7 @@ from app.modules.public.router import router as public_router
 from app.modules.reports.router import router as reports_router
 from app.modules.uploads.router import router as uploads_router
 from app.modules.users.router import router as users_router
+from app.modules.backup.router import router as backup_router
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -157,6 +158,7 @@ for router in (
     ai_router,
     panels_router,
     public_router,
+    backup_router,
 ):
     app.include_router(router, prefix=settings.API_V1_STR)
 

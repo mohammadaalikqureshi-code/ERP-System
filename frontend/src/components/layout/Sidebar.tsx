@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Database,
   KeyRound,
   LayoutDashboard,
   ListOrdered,
@@ -63,6 +64,7 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
     { icon: SlidersHorizontal, label: 'Panels', path: '/admin/panels' },
     { icon: KeyRound, label: 'API Keys', path: '/admin/api-keys' },
     { icon: Shield, label: 'Audit Logs', path: '/admin/audit' },
+    { icon: Database, label: 'DB Backups', path: '/admin/backup' },
     { icon: Settings, label: 'Clinic Settings', path: '/admin/settings' },
   ],
   clinic_admin: [
