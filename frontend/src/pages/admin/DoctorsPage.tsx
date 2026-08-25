@@ -8,10 +8,14 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Edit2, Calendar, Sparkles, Wand2, Copy, Check, Stethoscope } from 'lucide-react';
+import { Plus, Edit2, Calendar, Sparkles, Wand2, Copy, Check, Stethoscope, Lock, Crown, AlertCircle } from 'lucide-react';
 import { Doctor } from '@/types';
+import { useAuthStore } from '@/stores/authStore';
 
 const DoctorsPageContent = () => {
+  const currentUser = useAuthStore((state) => state.user);
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+
   const [isOpen, setIsOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
   
@@ -38,6 +42,14 @@ const DoctorsPageContent = () => {
   };
 
   const handleOpenCreate = () => {
+    if (!isSuperAdmin) {
+      toast({ 
+        title: "Access Restricted", 
+        description: "Only Platform Super Admin has the authority to provision doctor accounts and issue login credentials.", 
+        variant: "destructive" 
+      });
+      return;
+    }
     setEditingDoctor(null);
     setFirstName('');
     setLastName('');
@@ -77,6 +89,11 @@ const DoctorsPageContent = () => {
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!isSuperAdmin) {
+      toast({ title: "Unauthorized", description: "Only Super Admin can save credentials.", variant: "destructive" });
+      return;
+    }
+
     const formData = new FormData(e.currentTarget);
     const data = {
       firstName: (formData.get('firstName') as string)?.trim(),
@@ -92,7 +109,7 @@ const DoctorsPageContent = () => {
     try {
       if (editingDoctor) {
         await updateDoctor({ id: editingDoctor.id, ...data });
-        toast({ title: "Doctor Updated", variant: "success" });
+        toast({ title: "Doctor Profile Updated", variant: "success" });
       } else {
         await createDoctor(data);
         toast({ 
@@ -149,10 +166,33 @@ const DoctorsPageContent = () => {
           title="Doctors & Specialists" 
           description="Manage doctor profiles, OPD departments, consultation fees, and automatic login email provisioning." 
         />
-        <Button onClick={handleOpenCreate} className="bg-teal-600 hover:bg-teal-700 text-white gap-2">
-          <Plus className="h-4 w-4" /> Add Doctor
-        </Button>
+        {isSuperAdmin ? (
+          <Button onClick={handleOpenCreate} className="bg-teal-600 hover:bg-teal-700 text-white gap-2">
+            <Plus className="h-4 w-4" /> Add Doctor
+          </Button>
+        ) : (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-xs font-medium">
+            <Lock className="h-3.5 w-3.5" /> Super Admin Authorization Required to Provision Doctors
+          </div>
+        )}
       </div>
+
+      {/* Super Admin Privilege Notice Banner */}
+      {isSuperAdmin ? (
+        <div className="flex items-center gap-3 p-3.5 rounded-xl border border-teal-500/30 bg-teal-50/50 dark:bg-teal-950/20 text-xs text-teal-900 dark:text-teal-200">
+          <Crown className="h-5 w-5 text-amber-500 shrink-0" />
+          <div>
+            <strong>Super Admin Privilege Active:</strong> You hold exclusive authority to add consulting doctors, assign OPD departments, and issue official email credentials.
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 p-3.5 rounded-xl border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/50 text-xs text-stone-600 dark:text-stone-400">
+          <AlertCircle className="h-4 w-4 text-stone-500 shrink-0" />
+          <div>
+            <strong>Read-Only Directory:</strong> Doctors and login credentials can only be provisioned or modified by the <strong>Super Admin</strong>.
+          </div>
+        </div>
+      )}
 
       <DataTable
         columns={columns}
@@ -169,10 +209,12 @@ const DoctorsPageContent = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Stethoscope className="h-5 w-5 text-teal-600" />
-              {editingDoctor ? 'Edit Doctor Profile' : 'Add New Doctor & Provision Account'}
+              {editingDoctor ? 'Edit Doctor Profile' : 'Super Admin: Provision New Doctor'}
             </DialogTitle>
             <DialogDescription>
-              Enter the doctor's details. Official hospital email and password will be generated automatically.
+              {isSuperAdmin 
+                ? "Official hospital email and password will be generated and assigned exclusively by Super Admin."
+                : "Credential fields are locked for non-super admin users."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onSubmit} className="space-y-4 pt-2">
@@ -183,6 +225,7 @@ const DoctorsPageContent = () => {
                   id="firstName" 
                   name="firstName" 
                   value={firstName}
+                  disabled={!isSuperAdmin}
                   onChange={(e) => {
                     setFirstName(e.target.value);
                     if (!editingDoctor) {
@@ -201,6 +244,7 @@ const DoctorsPageContent = () => {
                   id="lastName" 
                   name="lastName" 
                   value={lastName}
+                  disabled={!isSuperAdmin}
                   onChange={(e) => {
                     setLastName(e.target.value);
                     if (!editingDoctor) {
@@ -220,23 +264,26 @@ const DoctorsPageContent = () => {
               <div className="flex items-center justify-between">
                 <Label htmlFor="email" className="text-xs font-bold text-teal-900 dark:text-teal-200 flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-teal-600" />
-                  Official Hospital Login Email
+                  Official Hospital Login Email (Super Admin Provisioned)
                 </Label>
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleAutoGenerateEmail}
-                  className="h-6 text-[11px] text-teal-700 dark:text-teal-300 hover:bg-teal-100/50 px-2 gap-1"
-                >
-                  <Wand2 className="h-3 w-3" /> Re-Generate
-                </Button>
+                {isSuperAdmin && (
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleAutoGenerateEmail}
+                    className="h-6 text-[11px] text-teal-700 dark:text-teal-300 hover:bg-teal-100/50 px-2 gap-1"
+                  >
+                    <Wand2 className="h-3 w-3" /> Re-Generate
+                  </Button>
+                )}
               </div>
               <Input 
                 id="email" 
                 name="email" 
                 type="email" 
                 value={generatedEmail}
+                disabled={!isSuperAdmin}
                 onChange={(e) => setGeneratedEmail(e.target.value)}
                 placeholder="dr.rahul.sharma@sanjeevanihospital.in" 
                 className="bg-background text-sm h-9 font-mono"
@@ -251,6 +298,7 @@ const DoctorsPageContent = () => {
                   id="department" 
                   name="department" 
                   value={department}
+                  disabled={!isSuperAdmin}
                   onChange={(e) => setDepartment(e.target.value)}
                   className="w-full h-9 px-3 border rounded-md bg-background text-sm"
                   required
@@ -290,34 +338,39 @@ const DoctorsPageContent = () => {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="password">Login Password</Label>
+                <Label htmlFor="password">Login Password (Assigned by Super Admin)</Label>
                 <div className="flex gap-1.5">
                   <Input 
                     id="password" 
                     name="password" 
                     value={generatedPassword}
+                    disabled={!isSuperAdmin}
                     onChange={(e) => setGeneratedPassword(e.target.value)}
                     className="font-mono text-xs h-9"
                   />
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleCopyCredentials}
-                    className="h-9 px-2.5"
-                    title="Copy Login Credentials"
-                  >
-                    {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
-                  </Button>
+                  {isSuperAdmin && (
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleCopyCredentials}
+                      className="h-9 px-2.5"
+                      title="Copy Login Credentials"
+                    >
+                      {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
 
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={isCreating || isUpdating} className="bg-teal-600 hover:bg-teal-700 text-white">
-                {isCreating || isUpdating ? 'Saving...' : (editingDoctor ? 'Update Profile' : 'Save & Provision Doctor')}
-              </Button>
+              {isSuperAdmin && (
+                <Button type="submit" disabled={isCreating || isUpdating} className="bg-teal-600 hover:bg-teal-700 text-white">
+                  {isCreating || isUpdating ? 'Saving...' : (editingDoctor ? 'Update Profile' : 'Save & Provision Doctor')}
+                </Button>
+              )}
             </DialogFooter>
           </form>
         </DialogContent>

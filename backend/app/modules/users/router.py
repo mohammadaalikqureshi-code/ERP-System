@@ -8,6 +8,7 @@ import uuid
 from app.core.database import get_db
 from app.core.deps import get_current_active_user
 from app.core.security import get_password_hash
+from app.core.exceptions import ForbiddenError
 from app.middleware.rbac import require_permission
 from app.middleware.clinic_scope import get_clinic_scope
 from app.models.user import User, Role
@@ -50,18 +51,24 @@ async def list_staff(
     staff_users = [u for u in users if u.role and u.role.name != "patient"]
     return [format_staff(u) for u in staff_users]
 
-@router.post("/staff", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("employees.create"))])
+@router.post("/staff", status_code=status.HTTP_201_CREATED)
 async def create_staff(
     payload: dict,
     db: AsyncSession = Depends(get_db),
-    clinic_id: uuid.UUID = Depends(get_clinic_scope)
+    clinic_id: uuid.UUID = Depends(get_clinic_scope),
+    current_user: User = Depends(get_current_active_user),
 ):
+    # Strict Super Admin Authority Enforcement
+    if not current_user.role or current_user.role.name != "super_admin":
+        raise ForbiddenError("Only Super Admin has the authority to provision staff accounts and issue login email & passwords.")
+
     first_name = payload.get("firstName", "")
     last_name = payload.get("lastName", "")
     full_name = f"{first_name} {last_name}".strip() or "Staff Member"
     email = payload.get("email")
     phone = payload.get("phone", "")
     role_str = payload.get("role", "RECEPTIONIST").lower()
+    raw_password = payload.get("password") or "Staff@2026"
 
     stmt = select(Role).where(Role.name == role_str)
     role_obj = (await db.execute(stmt)).scalar_one_or_none()
@@ -75,7 +82,7 @@ async def create_staff(
         full_name=full_name,
         email=email,
         phone=phone,
-        password_hash=get_password_hash("Staff@123"),
+        password_hash=get_password_hash(raw_password),
         is_active=True
     )
     db.add(new_user)
@@ -87,13 +94,17 @@ async def create_staff(
     reloaded = (await db.execute(stmt)).scalar_one()
     return format_staff(reloaded)
 
-@router.put("/staff/{user_id}", dependencies=[Depends(require_permission("employees.update"))])
-@router.patch("/staff/{user_id}", dependencies=[Depends(require_permission("employees.update"))])
+@router.put("/staff/{user_id}")
+@router.patch("/staff/{user_id}")
 async def update_staff(
     user_id: uuid.UUID,
     payload: dict,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
+    if not current_user.role or current_user.role.name != "super_admin":
+        raise ForbiddenError("Only Super Admin has the authority to modify staff accounts and credentials.")
+
     stmt = select(User).options(selectinload(User.role)).where(User.id == user_id)
     user = (await db.execute(stmt)).scalar_one_or_none()
     if not user:
@@ -107,6 +118,8 @@ async def update_staff(
         user.email = payload["email"]
     if "phone" in payload:
         user.phone = payload["phone"]
+    if "password" in payload and payload["password"]:
+        user.password_hash = get_password_hash(payload["password"])
     if "role" in payload:
         r_str = payload["role"].lower()
         stmt = select(Role).where(Role.name == r_str)
@@ -118,11 +131,15 @@ async def update_staff(
     await db.refresh(user)
     return format_staff(user)
 
-@router.patch("/staff/{user_id}/toggle-status", dependencies=[Depends(require_permission("employees.update"))])
+@router.patch("/staff/{user_id}/toggle-status")
 async def toggle_staff_status(
     user_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
+    if not current_user.role or current_user.role.name != "super_admin":
+        raise ForbiddenError("Only Super Admin has the authority to activate or suspend staff logins.")
+
     stmt = select(User).options(selectinload(User.role)).where(User.id == user_id)
     user = (await db.execute(stmt)).scalar_one_or_none()
     if not user:

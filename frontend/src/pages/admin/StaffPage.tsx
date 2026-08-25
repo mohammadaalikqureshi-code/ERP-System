@@ -10,7 +10,8 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Edit2, Users, Sparkles, Wand2, Copy, Check, ShieldCheck } from 'lucide-react';
+import { Plus, Edit2, Users, Sparkles, Wand2, Copy, Check, ShieldCheck, Lock, Crown, AlertCircle } from 'lucide-react';
+import { useAuthStore } from '@/stores/authStore';
 
 const useStaff = (role?: string) => {
   return useQuery({
@@ -23,6 +24,9 @@ const useStaff = (role?: string) => {
 };
 
 const StaffPageContent = () => {
+  const currentUser = useAuthStore((state) => state.user);
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('ALL');
   const [editingStaff, setEditingStaff] = useState<any | null>(null);
@@ -48,7 +52,7 @@ const StaffPageContent = () => {
       setIsOpen(false);
     },
     onError: (err: any) => {
-      toast({ title: "Failed to create", description: err.response?.data?.detail || err.message || "Error occurred", variant: "destructive" });
+      toast({ title: "Authority Error", description: err.response?.data?.message || err.response?.data?.detail || "Only Super Admin has authority to create staff.", variant: "destructive" });
     }
   });
 
@@ -60,11 +64,19 @@ const StaffPageContent = () => {
       setIsOpen(false);
     },
     onError: (err: any) => {
-      toast({ title: "Failed to update", description: err.response?.data?.detail || err.message || "Error occurred", variant: "destructive" });
+      toast({ title: "Authority Error", description: err.response?.data?.message || err.response?.data?.detail || "Only Super Admin has authority to modify credentials.", variant: "destructive" });
     }
   });
 
   const handleOpenCreate = () => {
+    if (!isSuperAdmin) {
+      toast({ 
+        title: "Access Restricted", 
+        description: "Only Platform Super Admin has the authority to provision staff accounts and issue login credentials.", 
+        variant: "destructive" 
+      });
+      return;
+    }
     setEditingStaff(null);
     setFirstName('');
     setLastName('');
@@ -104,6 +116,11 @@ const StaffPageContent = () => {
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!isSuperAdmin) {
+      toast({ title: "Unauthorized", description: "Only Super Admin can save credentials.", variant: "destructive" });
+      return;
+    }
+
     const formData = new FormData(e.currentTarget);
     const payload = {
       firstName: (formData.get('firstName') as string)?.trim(),
@@ -158,10 +175,33 @@ const StaffPageContent = () => {
           title="Staff & User Accounts" 
           description="Manage receptionist, nurse, pharmacist, lab technician, and administrator logins." 
         />
-        <Button onClick={handleOpenCreate} className="bg-teal-600 hover:bg-teal-700 text-white gap-2">
-          <Plus className="h-4 w-4" /> Add Staff Member
-        </Button>
+        {isSuperAdmin ? (
+          <Button onClick={handleOpenCreate} className="bg-teal-600 hover:bg-teal-700 text-white gap-2">
+            <Plus className="h-4 w-4" /> Add Staff Member
+          </Button>
+        ) : (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-xs font-medium">
+            <Lock className="h-3.5 w-3.5" /> Super Admin Authorization Required to Issue Credentials
+          </div>
+        )}
       </div>
+
+      {/* Super Admin Notice Banner */}
+      {isSuperAdmin ? (
+        <div className="flex items-center gap-3 p-3.5 rounded-xl border border-teal-500/30 bg-teal-50/50 dark:bg-teal-950/20 text-xs text-teal-900 dark:text-teal-200">
+          <Crown className="h-5 w-5 text-amber-500 shrink-0" />
+          <div>
+            <strong>Super Admin Privilege Active:</strong> You hold exclusive authority to provision hospital email IDs, generate secure passwords, and distribute login credentials to all department members.
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 p-3.5 rounded-xl border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/50 text-xs text-stone-600 dark:text-stone-400">
+          <AlertCircle className="h-4 w-4 text-stone-500 shrink-0" />
+          <div>
+            <strong>Read-Only Directory:</strong> Staff accounts and credentials can only be provisioned or modified by the <strong>Super Admin</strong>.
+          </div>
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
@@ -188,10 +228,12 @@ const StaffPageContent = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-teal-600" />
-              {editingStaff ? 'Edit Staff Profile' : 'Add New Staff & Auto-Generate Email'}
+              {editingStaff ? 'Edit Staff Profile' : 'Super Admin: Provision New Staff Login'}
             </DialogTitle>
             <DialogDescription>
-              Hospital login credentials and permissions will be configured automatically.
+              {isSuperAdmin 
+                ? "Official email and password will be generated and assigned exclusively by Super Admin."
+                : "Credential fields are locked for non-super admin users."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onSubmit} className="space-y-4 pt-2">
@@ -202,6 +244,7 @@ const StaffPageContent = () => {
                   id="firstName" 
                   name="firstName" 
                   value={firstName}
+                  disabled={!isSuperAdmin}
                   onChange={(e) => {
                     setFirstName(e.target.value);
                     if (!editingStaff) {
@@ -220,6 +263,7 @@ const StaffPageContent = () => {
                   id="lastName" 
                   name="lastName" 
                   value={lastName}
+                  disabled={!isSuperAdmin}
                   onChange={(e) => {
                     setLastName(e.target.value);
                     if (!editingStaff) {
@@ -240,6 +284,7 @@ const StaffPageContent = () => {
                 id="role"
                 name="role" 
                 value={role}
+                disabled={!isSuperAdmin}
                 onChange={(e) => {
                   setRole(e.target.value);
                   if (!editingStaff && firstName) {
@@ -264,23 +309,26 @@ const StaffPageContent = () => {
               <div className="flex items-center justify-between">
                 <Label htmlFor="email" className="text-xs font-bold text-teal-900 dark:text-teal-200 flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-teal-600" />
-                  Official Hospital Login Email
+                  Official Hospital Login Email (Super Admin Provisioned)
                 </Label>
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleAutoGenerateEmail}
-                  className="h-6 text-[11px] text-teal-700 dark:text-teal-300 hover:bg-teal-100/50 px-2 gap-1"
-                >
-                  <Wand2 className="h-3 w-3" /> Re-Generate
-                </Button>
+                {isSuperAdmin && (
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleAutoGenerateEmail}
+                    className="h-6 text-[11px] text-teal-700 dark:text-teal-300 hover:bg-teal-100/50 px-2 gap-1"
+                  >
+                    <Wand2 className="h-3 w-3" /> Re-Generate
+                  </Button>
+                )}
               </div>
               <Input 
                 id="email" 
                 name="email" 
                 type="email" 
                 value={generatedEmail}
+                disabled={!isSuperAdmin}
                 onChange={(e) => setGeneratedEmail(e.target.value)}
                 placeholder="priya.menon@sanjeevanihospital.in" 
                 className="bg-background text-sm h-9 font-mono"
@@ -300,34 +348,39 @@ const StaffPageContent = () => {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="password">Login Password</Label>
+                <Label htmlFor="password">Login Password (Assigned by Super Admin)</Label>
                 <div className="flex gap-1.5">
                   <Input 
                     id="password" 
                     name="password" 
                     value={generatedPassword}
+                    disabled={!isSuperAdmin}
                     onChange={(e) => setGeneratedPassword(e.target.value)}
                     className="font-mono text-xs h-9"
                   />
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleCopyCredentials}
-                    className="h-9 px-2.5"
-                    title="Copy Login Credentials"
-                  >
-                    {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
-                  </Button>
+                  {isSuperAdmin && (
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleCopyCredentials}
+                      className="h-9 px-2.5"
+                      title="Copy Login Credentials"
+                    >
+                      {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
 
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="bg-teal-600 hover:bg-teal-700 text-white">
-                {createMutation.isPending || updateMutation.isPending ? 'Saving...' : (editingStaff ? 'Update Staff' : 'Save & Provision Staff')}
-              </Button>
+              {isSuperAdmin && (
+                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="bg-teal-600 hover:bg-teal-700 text-white">
+                  {createMutation.isPending || updateMutation.isPending ? 'Saving...' : (editingStaff ? 'Update Staff' : 'Save & Provision Staff')}
+                </Button>
+              )}
             </DialogFooter>
           </form>
         </DialogContent>
