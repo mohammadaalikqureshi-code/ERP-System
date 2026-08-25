@@ -64,8 +64,8 @@ export const LoginPage: React.FC = () => {
   } = useHookForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      identifier: 'admin@medicare-erp.in',
-      password: 'Medicare@2026',
+      identifier: '',
+      password: '',
     },
   });
 
@@ -79,12 +79,12 @@ export const LoginPage: React.FC = () => {
   }, [setValue]);
 
   const DEMO_ACCOUNTS = [
-    { label: 'Super Admin', email: 'admin@medicare-erp.in', role: 'Platform Admin' },
     { label: 'Clinic Admin', email: 'neha.kulkarni@sanjeevanihospital.in', role: 'Hospital Admin' },
-    { label: 'Doctor', email: 'meera.raghavan@sanjeevanihospital.in', role: 'Cardiologist' },
-    { label: 'Receptionist', email: 'priya.menon@sanjeevanihospital.in', role: 'Front Desk' },
-    { label: 'Lab Tech', email: 'rakesh.kumar@sanjeevanihospital.in', role: 'Laboratory' },
-    { label: 'Pharmacist', email: 'imran.qureshi@sanjeevanihospital.in', role: 'Pharmacy' },
+    { label: 'Doctor OPD', email: 'meera.raghavan@sanjeevanihospital.in', role: 'Cardiologist' },
+    { label: 'Receptionist', email: 'priya.menon@sanjeevanihospital.in', role: 'Front Desk & Billing' },
+    { label: 'Lab Tech', email: 'mohammad.aalikqureshi@sanjeevanihospital.in', role: 'Diagnostics Laboratory' },
+    { label: 'Pharmacist', email: 'imran.qureshi@sanjeevanihospital.in', role: 'Pharmacy Inventory' },
+    { label: 'Staff Nurse', email: 'sunita.yadav@sanjeevanihospital.in', role: 'Inpatient Care' },
   ];
 
   const fillDemoAccount = (email: string) => {

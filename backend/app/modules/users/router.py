@@ -76,7 +76,7 @@ async def create_staff(
 ):
     # Strict Super Admin Authority Enforcement
     if not current_user.role or current_user.role.name != "super_admin":
-        raise ForbiddenError("Only Super Admin has the authority to provision staff accounts and issue login email & passwords.")
+        raise ForbiddenError("Only Platform Super Admin has the authority to provision staff accounts and issue login credentials.")
 
     first_name = (payload.get("firstName") or "").strip()
     last_name = (payload.get("lastName") or "").strip()
@@ -87,6 +87,10 @@ async def create_staff(
     role_str = normalize_role_name(raw_role)
     raw_password = payload.get("password") or "Staff@2026"
 
+    # SINGLE SUPER ADMIN INVARIANT ENFORCEMENT
+    if role_str == "super_admin":
+        raise ForbiddenError("Security Invariant Violation: Only one Master Super Admin can exist. Additional super_admin creation is strictly prohibited.")
+
     # Check for existing email
     existing = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
     if existing:
@@ -95,7 +99,6 @@ async def create_staff(
     stmt = select(Role).where(Role.name == role_str)
     role_obj = (await db.execute(stmt)).scalar_one_or_none()
     if not role_obj:
-        # Try finding role case-insensitively
         stmt = select(Role).where(Role.name.ilike(f"%{role_str}%"))
         role_obj = (await db.execute(stmt)).scalars().first()
         if not role_obj:
@@ -135,6 +138,21 @@ async def update_staff(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
+    # Prevent demoting or altering the master super admin's role
+    if user.role and user.role.name == "super_admin":
+        if "role" in payload and normalize_role_name(payload["role"]) != "super_admin":
+            raise ForbiddenError("Security Policy: The Master Super Admin cannot be demoted.")
+
+    # Prevent elevating other users to super_admin
+    if "role" in payload:
+        r_str = normalize_role_name(payload["role"])
+        if r_str == "super_admin" and user.role.name != "super_admin":
+            raise ForbiddenError("Security Policy: Escalation to super_admin is strictly prohibited.")
+        stmt = select(Role).where(Role.name == r_str)
+        r_obj = (await db.execute(stmt)).scalar_one_or_none()
+        if r_obj:
+            user.role_id = r_obj.id
+
     first_name = payload.get("firstName")
     last_name = payload.get("lastName")
     if first_name is not None or last_name is not None:
@@ -145,12 +163,6 @@ async def update_staff(
         user.phone = payload["phone"]
     if "password" in payload and payload["password"]:
         user.password_hash = get_password_hash(payload["password"])
-    if "role" in payload:
-        r_str = normalize_role_name(payload["role"])
-        stmt = select(Role).where(Role.name == r_str)
-        r_obj = (await db.execute(stmt)).scalar_one_or_none()
-        if r_obj:
-            user.role_id = r_obj.id
 
     await db.commit()
     await db.refresh(user)
@@ -169,6 +181,10 @@ async def toggle_staff_status(
     user = (await db.execute(stmt)).scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # IMMUTABLE MASTER SUPER ADMIN GUARD
+    if user.role and user.role.name == "super_admin":
+        raise ForbiddenError("Security Policy: Master Super Admin cannot be deactivated.")
         
     user.is_active = not user.is_active
     await db.commit()
