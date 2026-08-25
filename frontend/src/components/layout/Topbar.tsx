@@ -1,5 +1,6 @@
 import React from 'react';
-import { Menu, Search, User } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Menu, Search, User, FileText } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
@@ -49,7 +50,11 @@ export const Topbar: React.FC = () => {
           </div>
         )}
 
-        {user?.role !== 'super_admin' && <BranchSwitcher />}
+        <Link to="/reports" target="_blank">
+          <Button variant="outline" size="sm" className="hidden sm:flex items-center gap-1.5 text-xs text-teal-700 dark:text-teal-400 border-teal-500/30 hover:bg-teal-50 dark:hover:bg-teal-950/30">
+            <FileText className="h-3.5 w-3.5" /> Patient Reports
+          </Button>
+        </Link>
 
         <NotificationBell />
 

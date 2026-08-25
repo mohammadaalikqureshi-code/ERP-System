@@ -450,14 +450,25 @@ export const LoginPage: React.FC = () => {
           </div>
 
           {/* Register New Hospital CTA */}
-          <div className="mt-5 pt-4 border-t border-stone-200 dark:border-stone-800 text-center">
-            <Link
-              to="/register"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors"
-            >
-              <span>🏥 New Hospital or Clinic? Start 14-Day Free Trial</span>
-              <span>→</span>
-            </Link>
+          <div className="mt-5 pt-4 border-t border-stone-200 dark:border-stone-800 space-y-2 text-center">
+            <div>
+              <Link
+                to="/reports"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors"
+              >
+                <span>📄 Looking for your Medical Reports? Search Reports (No login needed)</span>
+                <span>→</span>
+              </Link>
+            </div>
+            <div>
+              <Link
+                to="/register"
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 transition-colors"
+              >
+                <span>🏥 New Hospital or Clinic? Start 14-Day Free Trial</span>
+                <span>→</span>
+              </Link>
+            </div>
           </div>
         </div>
       </div>

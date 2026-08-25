@@ -8,6 +8,7 @@ import { useAuthStore } from './stores/authStore';
 // Lazy load all pages
 const LoginPage = React.lazy(() => import('./pages/auth/LoginPage').then(m => ({ default: m.LoginPage })));
 const RegisterClinicPage = React.lazy(() => import('./pages/auth/RegisterClinicPage'));
+const PatientReportsPage = React.lazy(() => import('./pages/public/PatientReportsPage'));
 const DoctorDashboard = React.lazy(() => import('./pages/doctor/DoctorDashboard'));
 const ConsultationView = React.lazy(() => import('./pages/doctor/ConsultationView'));
 const SchedulePage = React.lazy(() => import('./pages/doctor/SchedulePage'));
@@ -86,6 +87,14 @@ export const router = createBrowserRouter([
   {
     path: '/onboard',
     element: withSuspense(RegisterClinicPage)
+  },
+  {
+    path: '/reports',
+    element: withSuspense(PatientReportsPage)
+  },
+  {
+    path: '/patient-reports',
+    element: withSuspense(PatientReportsPage)
   },
   {
     path: '/patient/login',
