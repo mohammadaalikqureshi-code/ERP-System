@@ -6,7 +6,7 @@ import * as z from 'zod';
 import apiClient from '@/api/client';
 import { ROLE_ROUTES } from '@/lib/constants';
 import { useToast } from '@/components/ui/use-toast';
-import { Activity, KeyRound, Lock, Mail, ArrowLeft, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Activity, KeyRound, Lock, Mail, ArrowLeft, CheckCircle2, ShieldCheck, FileText, HeartPulse } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -430,8 +430,33 @@ export const LoginPage: React.FC = () => {
           {/* Quick 1-Click Demo Accounts */}
           <div className="mt-6 pt-6 border-t border-stone-200 dark:border-stone-800">
             <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3 text-center">
-              Quick Sign-in (Demo Accounts)
+              Quick Sign-in (Demo Accounts & Portals)
             </p>
+
+            {/* Direct Patient Panel Card */}
+            <Link
+              to="/reports"
+              className="flex items-center justify-between p-3 mb-3 rounded-xl border-2 border-teal-500/60 bg-gradient-to-r from-teal-50 via-teal-50/40 to-emerald-50/50 dark:from-teal-950/40 dark:via-teal-900/20 dark:to-emerald-950/30 hover:border-teal-600 hover:shadow-md transition-all group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-teal-600 text-white rounded-lg group-hover:scale-105 transition-transform shadow-sm">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <div className="text-xs font-bold text-teal-950 dark:text-teal-200 flex items-center gap-1.5">
+                    <span>🏥 Patient Panel & Reports</span>
+                    <span className="text-[10px] uppercase px-2 py-0.5 bg-teal-200/80 dark:bg-teal-800 text-teal-900 dark:text-teal-100 rounded-full font-extrabold">
+                      Zero Login
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-teal-700/80 dark:text-teal-400">
+                    Click to view Diagnostic Reports, Prescriptions & Bills
+                  </div>
+                </div>
+              </div>
+              <span className="text-base font-bold text-teal-600 group-hover:translate-x-1 transition-transform pr-1">→</span>
+            </Link>
+
             <div className="grid grid-cols-2 gap-2">
               {DEMO_ACCOUNTS.map((acc) => (
                 <button
