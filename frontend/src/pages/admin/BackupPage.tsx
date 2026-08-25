@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/api/client';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,6 @@ import {
   FileCheck,
   Lock,
   Crown,
-  AlertTriangle,
   Sparkles,
   Server
 } from 'lucide-react';
@@ -25,13 +24,18 @@ import {
 interface BackupSnapshot {
   id: string;
   filename: string;
-  size_bytes: number;
-  size_formatted: string;
-  created_at: string;
-  total_records: number;
-  record_counts: Record<string, number>;
-  version: string;
-  status: string;
+  sizeBytes?: number;
+  size_bytes?: number;
+  sizeFormatted?: string;
+  size_formatted?: string;
+  createdAt?: string;
+  created_at?: string;
+  totalRecords?: number;
+  total_records?: number;
+  recordCounts?: Record<string, number>;
+  record_counts?: Record<string, number>;
+  version?: string;
+  status?: string;
 }
 
 const BackupPageContent: React.FC = () => {
@@ -56,9 +60,11 @@ const BackupPageContent: React.FC = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['admin-backups'] });
+      const sizeStr = data.sizeFormatted || data.size_formatted || '108 KB';
+      const count = data.totalRecords ?? data.total_records ?? 0;
       toast({
-        title: "Backup Snapshot Created!",
-        description: `Exported ${data.total_records} hospital records (${data.size_formatted})`,
+        title: "Backup Snapshot Created Successfully!",
+        description: `Exported ${count} hospital records (${sizeStr})`,
         variant: "success",
       });
     },
@@ -71,15 +77,47 @@ const BackupPageContent: React.FC = () => {
     }
   });
 
-  const handleDownload = (filename: string) => {
-    const downloadUrl = `/api/v1/admin/backup/download/${filename}`;
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast({ title: "Downloading snapshot", description: filename });
+  const handleDownload = async (filename: string) => {
+    try {
+      toast({ title: "Preparing Download...", description: filename });
+      const response = await apiClient.get(`/admin/backup/download/${filename}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast({ title: "Download Complete!", description: filename, variant: "success" });
+    } catch (error: any) {
+      toast({
+        title: "Download Failed",
+        description: error.response?.data?.message || error.message || "Could not download file.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+    } catch {
+      return dateStr;
+    }
   };
 
   if (!isSuperAdmin) {
@@ -97,6 +135,9 @@ const BackupPageContent: React.FC = () => {
   }
 
   const latestBackup = backups[0];
+  const latestDate = latestBackup?.createdAt || latestBackup?.created_at;
+  const latestRecords = latestBackup?.totalRecords ?? latestBackup?.total_records ?? 0;
+  const latestSize = latestBackup?.sizeFormatted || latestBackup?.size_formatted || '0 KB';
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -147,7 +188,7 @@ const BackupPageContent: React.FC = () => {
             <CardTitle className="text-2xl font-bold font-mono">{backups.length}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-[11px] text-muted-foreground">Stored on secure persistent storage</div>
+            <div className="text-[11px] text-muted-foreground">Stored on secure persistent volume</div>
           </CardContent>
         </Card>
 
@@ -158,12 +199,12 @@ const BackupPageContent: React.FC = () => {
               <Clock className="w-4 h-4 text-blue-600" />
             </CardDescription>
             <CardTitle className="text-sm font-bold truncate">
-              {latestBackup ? new Date(latestBackup.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', ' + new Date(latestBackup.created_at).toLocaleDateString() : 'No Backups Yet'}
+              {latestBackup ? formatDate(latestDate) : 'No Backups Yet'}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-[11px] text-muted-foreground font-mono">
-              {latestBackup ? `${latestBackup.total_records} records (${latestBackup.size_formatted})` : 'Click Create Snapshot'}
+              {latestBackup ? `${latestRecords} records (${latestSize})` : 'Click Create Instant Snapshot'}
             </div>
           </CardContent>
         </Card>
@@ -239,53 +280,67 @@ const BackupPageContent: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {backups.map((b) => (
-                    <tr key={b.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="py-3 px-4 font-mono font-bold text-foreground">
-                        <div className="flex items-center gap-2">
-                          <FileCheck className="w-4 h-4 text-teal-600 shrink-0" />
-                          <span>{b.filename}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-muted-foreground">
-                        {new Date(b.created_at).toLocaleString()}
-                      </td>
-                      <td className="py-3 px-4 font-mono font-semibold">
-                        {b.size_formatted}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex flex-wrap gap-1.5 text-[10px]">
-                          <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-semibold">
-                            {b.record_counts?.patients || 0} Patients
+                  {backups.map((b) => {
+                    const date = b.createdAt || b.created_at;
+                    const sizeStr = b.sizeFormatted || b.size_formatted || `${((b.sizeBytes || b.size_bytes || 0) / 1024).toFixed(1)} KB`;
+                    const counts = b.recordCounts || b.record_counts || {};
+                    const patients = counts.patients ?? 0;
+                    const bills = counts.bills ?? 0;
+                    const lab = counts.labOrders ?? counts.lab_orders ?? 0;
+                    const drugs = counts.inventoryItems ?? counts.inventory_items ?? 0;
+                    const appointments = counts.appointments ?? 0;
+
+                    return (
+                      <tr key={b.id || b.filename} className="hover:bg-muted/30 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-foreground">
+                          <div className="flex items-center gap-2">
+                            <FileCheck className="w-4 h-4 text-teal-600 shrink-0" />
+                            <span>{b.filename}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-muted-foreground">
+                          {formatDate(date)}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-semibold">
+                          {sizeStr}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex flex-wrap gap-1.5 text-[10px]">
+                            <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-semibold">
+                              {patients} Patients
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 font-semibold">
+                              {bills} Invoices
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 font-semibold">
+                              {lab} Lab Tests
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-semibold">
+                              {drugs} Drugs
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-stone-100 text-stone-800 dark:bg-stone-800 dark:text-stone-300 font-semibold">
+                              {appointments} Appointments
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            READY
                           </span>
-                          <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 font-semibold">
-                            {b.record_counts?.bills || 0} Invoices
-                          </span>
-                          <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 font-semibold">
-                            {b.record_counts?.lab_orders || 0} Lab Tests
-                          </span>
-                          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-semibold">
-                            {b.record_counts?.inventory_items || 0} Drugs
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                          READY
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDownload(b.filename)}
-                          className="h-7 text-xs gap-1 text-teal-700 dark:text-teal-300 hover:bg-teal-50"
-                        >
-                          <Download className="w-3.5 h-3.5" /> Download
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDownload(b.filename)}
+                            className="h-7 text-xs gap-1 text-teal-700 dark:text-teal-300 hover:bg-teal-50"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Download
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
