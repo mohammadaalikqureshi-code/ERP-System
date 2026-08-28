@@ -51,6 +51,33 @@ async def get_doctor_today_endpoint(
 ):
     return await AppointmentService(db).get_doctor_today_appointments(clinic_id, current_user.id, doctorId)
 
+@router.get("/admin/live-tokens", dependencies=[Depends(require_permission("appointments.read"))])
+async def get_admin_live_tokens_endpoint(
+    doctorId: uuid.UUID = None,
+    status: str = None,
+    visitType: str = None,
+    targetDate: str = None,
+    search: str = None,
+    db: AsyncSession = Depends(get_db),
+    clinic_id: uuid.UUID = Depends(get_clinic_scope)
+):
+    return await AppointmentService(db).get_admin_live_tokens(
+        clinic_id=clinic_id,
+        doctor_id=doctorId,
+        status=status,
+        visit_type=visitType,
+        target_date=targetDate,
+        search=search
+    )
+
+@router.post("/admin/boost-emergency/{id}", dependencies=[Depends(require_permission("appointments.update"))])
+async def boost_emergency_endpoint(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    clinic_id: uuid.UUID = Depends(get_clinic_scope)
+):
+    return await AppointmentService(db).boost_emergency_token(clinic_id, id)
+
 @router.get("/queue", dependencies=[Depends(require_permission("appointments.read"))])
 async def get_queue_endpoint(
     doctorId: uuid.UUID = None,

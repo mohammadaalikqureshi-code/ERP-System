@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   ListOrdered,
   LogOut,
+  Radio,
   Receipt,
   Settings,
   Shield,
@@ -55,6 +56,7 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
   ],
   super_admin: [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin' },
+    { icon: Radio, label: 'Live Token Control', path: '/admin/tokens' },
     { icon: Building2, label: 'Clinics', path: '/admin/clinics' },
     { icon: UserCog, label: 'Doctors', path: '/admin/doctors' },
     { icon: Users, label: 'Staff', path: '/admin/staff' },
@@ -67,6 +69,7 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
   ],
   clinic_admin: [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin' },
+    { icon: Radio, label: 'Live Token Control', path: '/admin/tokens' },
     { icon: Building2, label: 'Clinics', path: '/admin/clinics' },
     { icon: UserCog, label: 'Doctors', path: '/admin/doctors' },
     { icon: Users, label: 'Staff', path: '/admin/staff' },

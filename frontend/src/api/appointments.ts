@@ -138,6 +138,50 @@ export const useCompleteAndCallNext = () => {
       queryClient.invalidateQueries({ queryKey: ['doctorDashboard'] });
       queryClient.invalidateQueries({ queryKey: ['doctorTodayAppointments'] });
       queryClient.invalidateQueries({ queryKey: ['public', 'queue'] });
+      queryClient.invalidateQueries({ queryKey: ['adminLiveTokens'] });
+    },
+  });
+};
+
+export interface AdminTokenFilters {
+  doctorId?: string;
+  status?: string;
+  visitType?: string;
+  targetDate?: string;
+  search?: string;
+}
+
+export const useAdminLiveTokens = (filters: AdminTokenFilters = {}) => {
+  return useQuery({
+    queryKey: ['adminLiveTokens', filters],
+    queryFn: async () => {
+      const { data } = await apiClient.get<any>('/appointments/admin/live-tokens', {
+        params: {
+          doctorId: filters.doctorId || undefined,
+          status: filters.status || undefined,
+          visitType: filters.visitType || undefined,
+          targetDate: filters.targetDate || undefined,
+          search: filters.search || undefined,
+        },
+      });
+      return data;
+    },
+    refetchInterval: 3000,
+  });
+};
+
+export const useBoostEmergencyToken = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (appointmentId: string) => {
+      const { data } = await apiClient.post<any>(`/appointments/admin/boost-emergency/${appointmentId}`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminLiveTokens'] });
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['queue'] });
+      queryClient.invalidateQueries({ queryKey: ['public', 'queue'] });
     },
   });
 };

@@ -802,3 +802,157 @@ class AppointmentService:
             },
             "message": f"Token #{token_number} generated successfully for {patient.full_name}."
         }
+
+    async def get_admin_live_tokens(
+        self,
+        clinic_id: uuid.UUID,
+        doctor_id: uuid.UUID = None,
+        status: str = None,
+        visit_type: str = None,
+        target_date: str = None,
+        search: str = None
+    ):
+        """Super Admin / Clinic Admin Live Token & Queue Command Center with live analytics."""
+        from datetime import date as d_cls
+        from sqlalchemy import or_
+        t_date = d_cls.fromisoformat(target_date) if target_date else datetime.now(timezone.utc).date()
+
+        stmt = select(Appointment).options(
+            selectinload(Appointment.patient),
+            selectinload(Appointment.doctor).selectinload(Doctor.user)
+        ).where(
+            Appointment.clinic_id == clinic_id,
+            Appointment.appointment_date == t_date
+        )
+
+        if doctor_id:
+            stmt = stmt.where(Appointment.doctor_id == doctor_id)
+        if status and status != "all":
+            if status == "waiting":
+                stmt = stmt.where(Appointment.status.in_(["checked_in", "booked", "scheduled"]))
+            elif status == "emergency":
+                stmt = stmt.where(or_(Appointment.visit_type == "emergency", Appointment.token_number.like("EMG%")))
+            else:
+                stmt = stmt.where(Appointment.status == status)
+        if visit_type and visit_type != "all":
+            stmt = stmt.where(Appointment.visit_type == visit_type)
+
+        all_items = list((await self.db.execute(stmt)).scalars().all())
+
+        # Filter by search term if provided
+        if search and search.strip():
+            s = search.strip().lower()
+            all_items = [
+                a for a in all_items
+                if (a.token_number and s in a.token_number.lower())
+                or (a.patient and a.patient.full_name and s in a.patient.full_name.lower())
+                or (a.patient and a.patient.mobile and s in a.patient.mobile)
+                or (a.patient and a.patient.patient_code and s in a.patient.patient_code.lower())
+                or (a.doctor and a.doctor.user and s in a.doctor.user.full_name.lower())
+                or (a.department and s in a.department.lower())
+            ]
+
+        # Sort Emergency tokens FIRST, then by status (in_consultation, checked_in, booked, completed), then queue_number
+        status_priority = {
+            "in_consultation": 1,
+            "checked_in": 2,
+            "booked": 3,
+            "scheduled": 3,
+            "completed": 4,
+            "cancelled": 5,
+            "skipped": 5,
+        }
+        all_items.sort(
+            key=lambda a: (
+                0 if (a.visit_type == "emergency" or a.token_number.startswith("EMG")) else 1,
+                status_priority.get(a.status, 3),
+                a.queue_number
+            )
+        )
+
+        # Calculate live analytics summary
+        total = len(all_items)
+        emergency_count = sum(1 for a in all_items if a.visit_type == "emergency" or a.token_number.startswith("EMG"))
+        waiting_count = sum(1 for a in all_items if a.status in ["checked_in", "booked", "scheduled"])
+        in_consultation_count = sum(1 for a in all_items if a.status in ["in_consultation", "IN_CONSULTATION"])
+        completed_count = sum(1 for a in all_items if a.status in ["completed", "COMPLETED"])
+        emergency_active = sum(1 for a in all_items if (a.visit_type == "emergency" or a.token_number.startswith("EMG")) and a.status == "checked_in")
+
+        formatted_tokens = []
+        for a in all_items:
+            doc_user = a.doctor.user if a.doctor and a.doctor.user else None
+            is_emg = (a.visit_type == "emergency" or a.token_number.startswith("EMG"))
+            formatted_tokens.append({
+                "id": str(a.id),
+                "token_number": a.token_number,
+                "queue_number": a.queue_number,
+                "visit_type": a.visit_type,
+                "is_emergency": is_emg,
+                "status": a.status,
+                "appointment_date": str(a.appointment_date),
+                "appointment_time": str(a.appointment_time)[:5] if a.appointment_time else "--",
+                "notes": a.notes,
+                "department": a.department or (a.doctor.department if a.doctor else "General OPD"),
+                "patient": {
+                    "id": str(a.patient.id) if a.patient else None,
+                    "patient_code": a.patient.patient_code if a.patient else "PT-00000",
+                    "full_name": a.patient.full_name if a.patient else "Patient",
+                    "mobile": a.patient.mobile if a.patient else "-",
+                    "age": a.patient.age if a.patient else "-",
+                    "gender": a.patient.gender if a.patient else "-",
+                    "blood_group": a.patient.blood_group if a.patient else "O+"
+                } if a.patient else None,
+                "doctor": {
+                    "id": str(a.doctor.id) if a.doctor else None,
+                    "full_name": doc_user.full_name if doc_user else "Doctor OPD",
+                    "department": a.doctor.department if a.doctor else "OPD",
+                    "specialization": a.doctor.specialization if a.doctor else "Consultant",
+                    "consultation_fee": float(a.doctor.consultation_fee) if a.doctor and a.doctor.consultation_fee else 500.0,
+                    "room": "Room 101"
+                } if a.doctor else None,
+                "checked_in_at": str(a.checked_in_at) if a.checked_in_at else None,
+                "consultation_started_at": str(a.consultation_started_at) if a.consultation_started_at else None,
+                "completed_at": str(a.completed_at) if a.completed_at else None,
+            })
+
+        return {
+            "analytics": {
+                "total_tokens_today": total,
+                "emergency_tokens_today": emergency_count,
+                "emergency_active_waiting": emergency_active,
+                "waiting_lobby": waiting_count,
+                "in_consultation": in_consultation_count,
+                "completed_consultations": completed_count,
+                "regular_tokens_today": total - emergency_count,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            },
+            "tokens": formatted_tokens
+        }
+
+    async def boost_emergency_token(self, clinic_id: uuid.UUID, appointment_id: uuid.UUID):
+        """Promotes any token to Emergency Priority with live broadcast."""
+        apt = (await self.db.execute(
+            select(Appointment).options(
+                selectinload(Appointment.patient),
+                selectinload(Appointment.doctor).selectinload(Doctor.user)
+            ).where(Appointment.id == appointment_id, Appointment.clinic_id == clinic_id)
+        )).scalar_one_or_none()
+
+        if not apt:
+            raise NotFoundError("Appointment not found")
+
+        apt.visit_type = "emergency"
+        if not apt.token_number.startswith("EMG"):
+            apt.token_number = f"EMG-{apt.queue_number:02d}"
+        apt.status = "checked_in"
+        await self.db.commit()
+        await self.db.refresh(apt)
+
+        await self._announce(clinic_id, Events.APPOINTMENT_STATUS_CHANGED, apt.id, status="checked_in", tokenNumber=apt.token_number, is_emergency=True)
+
+        return {
+            "id": str(apt.id),
+            "token_number": apt.token_number,
+            "status": apt.status,
+            "message": f"Token #{apt.token_number} promoted to Emergency Priority!"
+        }
