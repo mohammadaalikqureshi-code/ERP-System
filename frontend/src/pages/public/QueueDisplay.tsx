@@ -8,6 +8,7 @@ import api from '@/api/client';
 /**
  * Waiting-room screen with TTS voice calling.
  * Open full-screen on a TV:
+ *   /queue/display (auto-connects to primary clinic)
  *   /queue/display?clinicId=<uuid>&doctorId=<uuid>
  *
  * TTS announces: "Token A-003, please proceed to consultation room"
@@ -24,16 +25,18 @@ export default function QueueDisplay() {
 
   const { isConnected } = useQueueSocket({ clinicId, doctorId });
 
-  const { data: queueData } = useQuery({
+  const { data: queueData, isLoading } = useQuery({
     queryKey: ['queue', 'display', clinicId, doctorId],
     queryFn: async () => {
       const { data } = await api.get('/public/queue', {
-        params: { clinicId, doctorId: doctorId || undefined },
+        params: { 
+          clinicId: clinicId || undefined, 
+          doctorId: doctorId || undefined 
+        },
       });
       return data;
     },
-    enabled: !!clinicId,
-    refetchInterval: 10_000,
+    refetchInterval: 5000,
   });
 
   useEffect(() => {
@@ -71,10 +74,10 @@ export default function QueueDisplay() {
     
     if (currentToken && currentToken !== lastAnnouncedToken.current) {
       lastAnnouncedToken.current = currentToken;
-      const room = current?.department || 'the consultation room';
+      const room = current?.department ? `${current.department} Consultation Room` : 'the consultation room';
       const doctorDisplay = current?.doctorName ? `, Doctor ${current.doctorName}` : '';
       
-      // Repeat announcement twice for clarity
+      // Repeat announcement for clarity
       setTimeout(() => {
         speak(`Token ${currentToken.split('').join(' ')}${doctorDisplay}, please proceed to ${room}`);
       }, 500);
@@ -82,108 +85,121 @@ export default function QueueDisplay() {
         speak(`Token ${currentToken.split('').join(' ')}, please proceed to ${room}`);
       }, 6000);
     }
-  }, [queueData?.current?.tokenNumber, speak]);
+  }, [queueData?.current?.tokenNumber, queueData?.current?.doctorName, queueData?.current?.department, speak]);
 
-  // Enable TTS on first user interaction (browser autoplay policy)
+  // Enable TTS on user interaction
   const handleEnableTTS = () => {
     setTtsEnabled(true);
-    speak('Voice calling system activated');
+    speak('Voice calling system is active');
   };
 
-  if (!clinicId) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-black p-8 text-center text-white">
-        <h1 className="mb-4 text-4xl font-bold">Queue Display</h1>
-        <p className="max-w-xl text-xl text-stone-400">
-          Open this screen with a clinic in the address, for example
-          <code className="mx-2 rounded bg-stone-800 px-2 py-1 text-teal-400">
-            /queue/display?clinicId=YOUR-CLINIC-ID
-          </code>
-        </p>
-      </div>
-    );
-  }
-
   const current = queueData?.current;
-  const currentToken = current?.tokenNumber || '--';
+  const currentToken = current?.tokenNumber || (isLoading ? '...' : '--');
   const doctorName = current?.doctorName || '';
-  const clinicName = queueData?.clinicName || 'Clinic Queue Display';
-  const nextTokens: { tokenNumber: string; doctorName?: string }[] = (queueData?.waiting || []).slice(0, 5);
+  const clinicName = queueData?.clinicName || 'Sanjeevani Multi-Specialty Hospital';
+  const nextTokens: { tokenNumber: string; doctorName?: string; queueNumber?: number }[] = (queueData?.waiting || []).slice(0, 6);
 
   return (
-    <div className="flex min-h-screen flex-col bg-black p-8 text-white">
-      {/* Header */}
-      <div className="mb-12 flex items-center justify-between">
+    <div className="flex min-h-screen flex-col bg-stone-950 p-6 md:p-10 text-white select-none">
+      {/* Top Bar */}
+      <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-stone-800 pb-6">
         <div>
-          <h1 className="text-4xl font-bold text-stone-400">{clinicName}</h1>
-          <p className="text-lg uppercase tracking-widest text-stone-600">Queue Display</p>
-          {doctorName && <p className="mt-2 text-3xl text-teal-400">{doctorName}</p>}
-        </div>
-        <div className="text-right">
-          <div className="font-mono text-4xl text-stone-400">{time}</div>
-          <div className="mt-2 flex items-center justify-end gap-4 text-lg text-stone-500">
-            <span
-              className={`h-3 w-3 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-amber-500'}`}
-              aria-hidden
-            />
-            {isConnected ? 'Live' : 'Reconnecting…'}
-            <button 
-              onClick={handleEnableTTS}
-              className={`ml-4 rounded-full px-4 py-1 text-sm transition-colors ${
-                ttsEnabled 
-                  ? 'bg-teal-900 text-teal-300 border border-teal-700' 
-                  : 'bg-stone-800 text-stone-400 border border-stone-700 animate-pulse'
-              }`}
-            >
-              🔊 {ttsEnabled ? 'Voice ON' : 'Click to Enable Voice'}
-            </button>
+          <div className="flex items-center gap-3">
+            <span className="inline-block w-3 h-3 rounded-full bg-teal-500 animate-ping" />
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-stone-100">{clinicName}</h1>
           </div>
+          <p className="mt-1 text-sm uppercase tracking-widest text-teal-400 font-semibold">
+            Central OPD Waiting Lounge • Live Token Board
+          </p>
+        </div>
+        <div className="flex items-center gap-6">
+          <div className="font-mono text-3xl md:text-4xl font-bold text-stone-200">{time}</div>
+          <button 
+            onClick={handleEnableTTS}
+            className={`rounded-full px-4 py-1.5 text-xs font-semibold tracking-wide transition-all ${
+              ttsEnabled 
+                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm' 
+                : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
+            }`}
+          >
+            🔊 {ttsEnabled ? 'Voice Calling: ACTIVE' : 'Click to Enable Audio'}
+          </button>
         </div>
       </div>
 
-      {/* Current Token - Large Display */}
-      <div className="flex flex-1 flex-col items-center justify-center space-y-8">
-        <div className="text-5xl font-medium text-stone-300 uppercase tracking-widest">Now Serving</div>
-        <div className="relative">
-          <div className="text-[12rem] font-bold leading-none tracking-tighter text-teal-400 animate-pulse">
-            {currentToken}
+      {/* Main Grid: Serving & Next Up */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 items-stretch">
+        {/* NOW SERVING HERO CARD */}
+        <div className="lg:col-span-2 flex flex-col items-center justify-center p-8 rounded-3xl bg-stone-900/90 border border-stone-800 shadow-2xl relative overflow-hidden text-center">
+          <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-teal-500 via-emerald-400 to-teal-500" />
+          
+          <div className="text-xl md:text-2xl font-bold uppercase tracking-widest text-stone-400 mb-2">
+            🔔 NOW SERVING
           </div>
-          {current && (
-            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 h-1 w-48 rounded-full bg-teal-500/50" />
-          )}
-        </div>
-        <div className="text-4xl text-stone-200">
-          {current
-            ? `Please proceed to ${current.department || 'the consultation room'}`
-            : 'Waiting for the next patient'}
-        </div>
-        {current?.doctorName && (
-          <div className="text-2xl text-teal-400/80">
-            Doctor: {current.doctorName}
-          </div>
-        )}
-      </div>
 
-      {/* Next in Queue */}
-      <div className="mt-auto border-t border-stone-800 pt-8">
-        <div className="mb-4 text-2xl uppercase tracking-widest text-stone-400">Next in Queue</div>
-        <div className="flex h-28 space-x-6 overflow-x-auto">
-          {nextTokens.map((item, index) => (
-            <Card
-              key={item.tokenNumber || index}
-              className="flex min-w-[10rem] items-center justify-center border-stone-800 bg-stone-900 transition-all hover:border-teal-800"
-            >
-              <CardContent className="p-4 text-center">
-                <div className="text-4xl font-bold text-stone-300">{item.tokenNumber}</div>
-                {item.doctorName && (
-                  <div className="mt-1 text-xs text-stone-500 truncate">{item.doctorName}</div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-          {nextTokens.length === 0 && (
-            <div className="flex items-center text-2xl italic text-stone-500">No waiting patients</div>
+          <div className="my-6">
+            <div className="text-8xl md:text-[11rem] font-black tracking-tighter text-teal-400 font-mono drop-shadow-[0_0_35px_rgba(20,184,166,0.3)]">
+              {currentToken}
+            </div>
+          </div>
+
+          {current ? (
+            <div className="space-y-2">
+              <div className="text-2xl md:text-3xl font-bold text-stone-100">
+                {current.doctorName || 'Doctor Cabin'}
+              </div>
+              <div className="inline-block px-4 py-1 rounded-full bg-teal-950 text-teal-300 border border-teal-800 text-sm font-semibold uppercase tracking-wider">
+                {current.department || 'General Consultation'} • Room 1
+              </div>
+            </div>
+          ) : (
+            <div className="text-lg text-stone-500 font-medium">
+              Waiting for doctor to call next patient...
+            </div>
           )}
+        </div>
+
+        {/* UPCOMING QUEUE LIST */}
+        <div className="flex flex-col rounded-3xl bg-stone-900/70 border border-stone-800 p-6 shadow-xl">
+          <div className="flex items-center justify-between border-b border-stone-800 pb-4 mb-4">
+            <h2 className="text-base font-bold uppercase tracking-wider text-stone-300 flex items-center gap-2">
+              <span>📋</span> UP NEXT IN QUEUE
+            </h2>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-stone-800 text-stone-400 font-mono">
+              {nextTokens.length} Waiting
+            </span>
+          </div>
+
+          <div className="flex-1 space-y-3 overflow-y-auto">
+            {nextTokens.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-stone-500 text-sm">
+                <span>No other patients waiting in queue.</span>
+              </div>
+            ) : (
+              nextTokens.map((t, idx) => (
+                <div 
+                  key={t.tokenNumber || idx}
+                  className="flex items-center justify-between p-3.5 rounded-2xl bg-stone-800/60 border border-stone-700/50 hover:bg-stone-800 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-stone-700 text-stone-300 text-xs font-bold flex items-center justify-center font-mono">
+                      {idx + 1}
+                    </span>
+                    <span className="text-2xl font-bold font-mono text-stone-100">
+                      {t.tokenNumber}
+                    </span>
+                  </div>
+                  <div className="text-right text-xs text-stone-400">
+                    <span className="font-medium text-teal-400">{t.doctorName || 'OPD'}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-stone-800/80 text-center text-xs text-stone-500">
+            Please be seated. Your token will be called automatically.
+          </div>
         </div>
       </div>
     </div>

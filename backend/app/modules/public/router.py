@@ -57,15 +57,24 @@ async def public_queue(
     clinic_id = clinic_id or clinicId
     doctor_id = doctor_id or doctorId
     if not clinic_id:
-        raise ValidationError("A clinic id is required, e.g. ?clinicId=<uuid>")
-
-    clinic = (
-        await db.execute(
-            select(Clinic).where(Clinic.id == clinic_id, Clinic.is_active == True)
-        )
-    ).scalar_one_or_none()
-    if not clinic:
-        raise NotFoundError("Clinic not found")
+        first_clinic = (
+            await db.execute(
+                select(Clinic).where(Clinic.is_active == True).limit(1)
+            )
+        ).scalar_one_or_none()
+        if first_clinic:
+            clinic = first_clinic
+            clinic_id = first_clinic.id
+        else:
+            raise NotFoundError("No active clinic found in the system.")
+    else:
+        clinic = (
+            await db.execute(
+                select(Clinic).where(Clinic.id == clinic_id, Clinic.is_active == True)
+            )
+        ).scalar_one_or_none()
+        if not clinic:
+            raise NotFoundError("Clinic not found")
 
     statement = (
         select(Appointment)
