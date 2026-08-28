@@ -14,7 +14,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { 
   FileText, CheckCircle, Plus, Trash2, Loader2, Save, Sparkles, 
   ArrowRight, Activity, HeartPulse, User, Pill, Stethoscope, 
-  Phone, AlertTriangle, ShieldCheck, Clock, Check, Search, ChevronDown, ListPlus, Calendar, Layers
+  Phone, AlertTriangle, ShieldCheck, Clock, Check, Search, ChevronDown, ListPlus, Calendar, Layers, Settings, Star, X
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -34,14 +34,57 @@ import {
 } from '@/data/drugDatabase';
 
 // =========================================================================
-// 🚀 UPSIDE FLOATING AUTO-SUGGEST INPUT COMPONENT
-// Renders suggestions directly ABOVE (UPSIDE) the input block while typing!
+// 🌟 DOCTOR CUSTOM PRESETS INTERFACE & STORAGE
+// =========================================================================
+export interface DoctorCustomPresets {
+  medicines: DrugInfo[];
+  dosages: string[];
+  frequencies: string[];
+  durations: string[];
+  instructions: string[];
+  bp: string[];
+  heartRate: string[];
+  temperature: string[];
+  spo2: string[];
+  weight: string[];
+  height: string[];
+}
+
+const STORAGE_KEY = 'doctor_personal_custom_presets_v2';
+
+const getInitialCustomPresets = (): DoctorCustomPresets => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    console.error("Failed to load doctor custom presets", e);
+  }
+  return {
+    medicines: [],
+    dosages: [],
+    frequencies: [],
+    durations: [],
+    instructions: [],
+    bp: [],
+    heartRate: [],
+    temperature: [],
+    spo2: [],
+    weight: [],
+    height: [],
+  };
+};
+
+// =========================================================================
+// 🚀 UPSIDE FLOATING AUTO-SUGGEST INPUT COMPONENT WITH CUSTOM PRESETS SUPPORT
 // =========================================================================
 interface UpsideAutoSuggestProps {
   label: string;
   value: string;
   onChange: (val: string) => void;
   options: string[] | DrugInfo[];
+  customOptions?: string[] | DrugInfo[];
+  onSaveCustom?: (val: string) => void;
+  onDeleteCustom?: (val: string) => void;
   placeholder?: string;
   isDrugName?: boolean;
   onDrugSelect?: (drug: DrugInfo) => void;
@@ -53,6 +96,9 @@ const UpsideAutoSuggestInput: React.FC<UpsideAutoSuggestProps> = ({
   value,
   onChange,
   options,
+  customOptions = [],
+  onSaveCustom,
+  onDeleteCustom,
   placeholder,
   isDrugName = false,
   onDrugSelect,
@@ -61,24 +107,48 @@ const UpsideAutoSuggestInput: React.FC<UpsideAutoSuggestProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Filter options based on typed value
-  const filteredOptions = React.useMemo(() => {
-    const q = (value || '').toLowerCase().trim();
-    if (!q) return options;
+  const q = (value || '').toLowerCase().trim();
 
+  // Filter doctor's custom presets
+  const filteredCustom = React.useMemo(() => {
+    if (!customOptions || customOptions.length === 0) return [];
+    if (isDrugName) {
+      return (customOptions as DrugInfo[]).filter(
+        (d) => !q || d.name.toLowerCase().includes(q) || d.generic.toLowerCase().includes(q)
+      );
+    }
+    return (customOptions as string[]).filter((opt) => !q || opt.toLowerCase().includes(q));
+  }, [customOptions, q, isDrugName]);
+
+  // Filter default catalog options
+  const filteredOptions = React.useMemo(() => {
     if (isDrugName) {
       return (options as DrugInfo[]).filter(
         (d) =>
+          !q ||
           d.name.toLowerCase().includes(q) ||
           d.generic.toLowerCase().includes(q) ||
           d.category.toLowerCase().includes(q)
       );
     }
 
-    return (options as string[]).filter((opt) =>
-      opt.toLowerCase().includes(q)
+    return (options as string[]).filter((opt) => !q || opt.toLowerCase().includes(q));
+  }, [value, options, isDrugName, q]);
+
+  // Check if current typed value is already existing
+  const isAlreadyInPresets = React.useMemo(() => {
+    if (!q) return true;
+    if (isDrugName) {
+      return (
+        [...(customOptions as DrugInfo[]), ...(options as DrugInfo[])].some(
+          (d) => d.name.toLowerCase() === q
+        )
+      );
+    }
+    return [...(customOptions as string[]), ...(options as string[])].some(
+      (opt) => opt.toLowerCase() === q
     );
-  }, [value, options, isDrugName]);
+  }, [q, customOptions, options, isDrugName]);
 
   // Click outside to close upside popup
   useEffect(() => {
@@ -94,36 +164,151 @@ const UpsideAutoSuggestInput: React.FC<UpsideAutoSuggestProps> = ({
   return (
     <div className="relative space-y-1.5" ref={containerRef}>
       <div className="flex items-center justify-between">
-        <Label className="text-[11px] font-bold text-stone-800 dark:text-stone-200">
-          {label}
+        <Label className="text-[11px] font-bold text-stone-800 dark:text-stone-200 flex items-center gap-1.5">
+          <span>{label}</span>
+          {filteredCustom.length > 0 && (
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 font-extrabold">
+              ⭐ {filteredCustom.length} Custom
+            </span>
+          )}
         </Label>
         {sublabel && (
           <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold">{sublabel}</span>
         )}
       </div>
 
-      {/* 🌟 UPSIDE FLOATING RESULTS POPUP (Positioned Above the Input Block) */}
+      {/* 🌟 UPSIDE FLOATING RESULTS POPUP */}
       {isOpen && (
-        <div className="absolute bottom-full mb-1.5 left-0 right-0 z-50 bg-white dark:bg-stone-900 border-2 border-teal-500/80 rounded-2xl shadow-[0_-10px_35px_rgba(0,0,0,0.25)] max-h-60 overflow-y-auto divide-y divide-stone-100 dark:divide-stone-800 animate-in fade-in slide-in-from-bottom-2">
+        <div className="absolute bottom-full mb-1.5 left-0 right-0 z-50 bg-white dark:bg-stone-900 border-2 border-teal-500/80 rounded-2xl shadow-[0_-10px_35px_rgba(0,0,0,0.25)] max-h-64 overflow-y-auto divide-y divide-stone-100 dark:divide-stone-800 animate-in fade-in slide-in-from-bottom-2">
           {/* Header of Upside Popup */}
           <div className="sticky top-0 bg-teal-50/95 dark:bg-stone-800/95 px-3 py-1.5 border-b border-teal-200 dark:border-stone-700 flex items-center justify-between backdrop-blur-sm z-10">
             <span className="text-[10px] font-black uppercase tracking-wider text-teal-800 dark:text-teal-300 flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-amber-500" />
-              Suggestions ({filteredOptions.length})
+              Suggestions ({filteredCustom.length + filteredOptions.length})
             </span>
             <span className="text-[9px] text-stone-500 font-medium">Click to select ⚡</span>
           </div>
 
-          {/* Results List */}
+          {/* Quick 1-Click "Save as My Custom Preset" Banner */}
+          {onSaveCustom && !isAlreadyInPresets && value.trim() && (
+            <div className="p-2 bg-amber-50/90 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900/60 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-amber-900 dark:text-amber-200 truncate">
+                ⭐ Save "{value}" as your custom preset?
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onSaveCustom(value.trim());
+                }}
+                className="h-6 px-2 text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-bold shrink-0 cursor-pointer"
+              >
+                + Save Preset
+              </Button>
+            </div>
+          )}
+
+          {/* SECTION 1: Doctor's Custom Presets (Top Priority) */}
+          {filteredCustom.length > 0 && (
+            <div className="bg-amber-50/30 dark:bg-amber-950/20 divide-y divide-amber-100/60 dark:divide-amber-900/40">
+              <div className="px-3 py-1 text-[9px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-400 bg-amber-100/50 dark:bg-amber-900/30 flex items-center gap-1">
+                <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                My Custom Presets ({filteredCustom.length})
+              </div>
+              {filteredCustom.map((opt: any, idx: number) => {
+                if (isDrugName) {
+                  const drug = opt as DrugInfo;
+                  return (
+                    <div
+                      key={`custom-${idx}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        onChange(drug.name);
+                        if (onDrugSelect) onDrugSelect(drug);
+                        setIsOpen(false);
+                      }}
+                      className="p-2.5 hover:bg-amber-100/70 dark:hover:bg-amber-900/40 cursor-pointer transition-all flex items-center justify-between group"
+                    >
+                      <div className="space-y-0.5 flex-1 pr-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-xs text-stone-900 dark:text-stone-100 group-hover:text-amber-700 dark:group-hover:text-amber-300">
+                            {drug.name}
+                          </span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200">
+                            Custom
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-stone-500 italic">Formula: {drug.generic}</div>
+                      </div>
+                      {onDeleteCustom && (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onDeleteCustom(drug.name);
+                          }}
+                          className="text-stone-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50"
+                          title="Delete Custom Preset"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
+
+                const strOpt = opt as string;
+                return (
+                  <div
+                    key={`custom-${idx}`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onChange(strOpt);
+                      setIsOpen(false);
+                    }}
+                    className="px-3 py-2 text-xs font-semibold text-stone-900 dark:text-stone-100 hover:bg-amber-100/70 dark:hover:bg-amber-900/40 cursor-pointer transition-all flex items-center justify-between group"
+                  >
+                    <span className="group-hover:text-amber-700 dark:group-hover:text-amber-300 font-bold flex items-center gap-1.5">
+                      <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                      {strOpt}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200">
+                        Custom
+                      </span>
+                      {onDeleteCustom && (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onDeleteCustom(strOpt);
+                          }}
+                          className="text-stone-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 ml-1"
+                          title="Delete Preset"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* SECTION 2: Standard Catalog Options */}
           {filteredOptions.length > 0 ? (
             filteredOptions.map((opt: any, idx: number) => {
               if (isDrugName) {
                 const drug = opt as DrugInfo;
                 return (
                   <div
-                    key={idx}
+                    key={`standard-${idx}`}
                     onMouseDown={(e) => {
-                      e.preventDefault(); // Prevent input blur
+                      e.preventDefault();
                       onChange(drug.name);
                       if (onDrugSelect) onDrugSelect(drug);
                       setIsOpen(false);
@@ -138,15 +323,13 @@ const UpsideAutoSuggestInput: React.FC<UpsideAutoSuggestProps> = ({
                         {drug.category}
                       </span>
                     </div>
-                    <div className="text-[11px] text-stone-500 italic">
-                      Formula: {drug.generic}
-                    </div>
+                    <div className="text-[11px] text-stone-500 italic">Formula: {drug.generic}</div>
                     <div className="text-[10px] text-teal-700 dark:text-teal-400 font-semibold flex items-center gap-2 mt-0.5">
                       <span>Dose: {drug.defaultDosage}</span>
                       <span>•</span>
                       <span>Freq: {drug.defaultFrequency.split(' ')[0]}</span>
                       <span>•</span>
-                      <span>Dur: {drug.defaultDuration.split(' ')[0]} {drug.defaultDuration.split(' ')[1] || ''}</span>
+                      <span>Dur: {drug.defaultDuration.split(' ')[0]}</span>
                     </div>
                   </div>
                 );
@@ -155,9 +338,9 @@ const UpsideAutoSuggestInput: React.FC<UpsideAutoSuggestProps> = ({
               const strOpt = opt as string;
               return (
                 <div
-                  key={idx}
+                  key={`standard-${idx}`}
                   onMouseDown={(e) => {
-                    e.preventDefault(); // Prevent input blur
+                    e.preventDefault();
                     onChange(strOpt);
                     setIsOpen(false);
                   }}
@@ -173,9 +356,11 @@ const UpsideAutoSuggestInput: React.FC<UpsideAutoSuggestProps> = ({
               );
             })
           ) : (
-            <div className="p-4 text-center text-xs text-stone-500 italic">
-              No exact match. Your custom typing is saved!
-            </div>
+            filteredCustom.length === 0 && (
+              <div className="p-4 text-center text-xs text-stone-500 italic">
+                No exact match found. You can type freely or save it as a custom preset!
+              </div>
+            )
           )}
         </div>
       )}
@@ -206,8 +391,7 @@ const UpsideAutoSuggestInput: React.FC<UpsideAutoSuggestProps> = ({
 };
 
 // =========================================================================
-// 🌟 MULTI-SPECIAL INSTRUCTION INPUT COMPONENT (Pick Many Instructions)
-// Allows selecting multiple clinical guidelines with live chips and upside catalog
+// 🌟 MULTI-SPECIAL INSTRUCTION INPUT COMPONENT (Pick Many & Custom Presets)
 // =========================================================================
 interface MultiSpecialInstructionProps {
   label: string;
@@ -215,6 +399,9 @@ interface MultiSpecialInstructionProps {
   value: string;
   onChange: (val: string) => void;
   options: string[];
+  customOptions?: string[];
+  onSaveCustom?: (val: string) => void;
+  onDeleteCustom?: (val: string) => void;
   placeholder?: string;
 }
 
@@ -224,13 +411,15 @@ const MultiSpecialInstructionInput: React.FC<MultiSpecialInstructionProps> = ({
   value,
   onChange,
   options,
+  customOptions = [],
+  onSaveCustom,
+  onDeleteCustom,
   placeholder = "Type or select multiple instructions...",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [customInput, setCustomInput] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Parse existing instructions (support newlines or bullet points)
   const activeInstructions = React.useMemo(() => {
     if (!value || !value.trim()) return [];
     return value
@@ -267,14 +456,22 @@ const MultiSpecialInstructionInput: React.FC<MultiSpecialInstructionProps> = ({
     }
   };
 
-  // Filter options based on custom typing
-  const filteredOptions = React.useMemo(() => {
-    const q = customInput.toLowerCase().trim();
-    if (!q) return options;
-    return options.filter((opt) => opt.toLowerCase().includes(q));
-  }, [customInput, options]);
+  const q = customInput.toLowerCase().trim();
 
-  // Click outside to close popup
+  const filteredCustom = React.useMemo(() => {
+    if (!customOptions || customOptions.length === 0) return [];
+    return customOptions.filter((opt) => !q || opt.toLowerCase().includes(q));
+  }, [customOptions, q]);
+
+  const filteredOptions = React.useMemo(() => {
+    return options.filter((opt) => !q || opt.toLowerCase().includes(q));
+  }, [options, q]);
+
+  const isAlreadyInPresets = React.useMemo(() => {
+    if (!q) return true;
+    return [...customOptions, ...options].some((opt) => opt.toLowerCase() === q);
+  }, [q, customOptions, options]);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -296,59 +493,124 @@ const MultiSpecialInstructionInput: React.FC<MultiSpecialInstructionProps> = ({
         </span>
       </div>
 
-      {/* 🌟 UPSIDE FLOATING RESULTS POPUP (Positioned Above the Input Block) */}
+      {/* 🌟 UPSIDE FLOATING RESULTS POPUP */}
       {isOpen && (
         <div className="absolute bottom-full mb-1.5 left-0 right-0 z-50 bg-white dark:bg-stone-900 border-2 border-teal-500/80 rounded-2xl shadow-[0_-10px_35px_rgba(0,0,0,0.25)] max-h-64 overflow-y-auto divide-y divide-stone-100 dark:divide-stone-800 animate-in fade-in slide-in-from-bottom-2">
-          {/* Header of Upside Popup */}
+          {/* Header */}
           <div className="sticky top-0 bg-teal-50/95 dark:bg-stone-800/95 px-3 py-2 border-b border-teal-200 dark:border-stone-700 flex items-center justify-between backdrop-blur-sm z-10">
             <span className="text-[10px] font-black uppercase tracking-wider text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              Special Instructions Catalog ({activeInstructions.length} Selected)
+              Special Instructions ({activeInstructions.length} Selected)
             </span>
-            <span className="text-[9px] text-stone-500 font-medium">Click to Add/Remove Multiple ⚡</span>
+            <span className="text-[9px] text-stone-500 font-medium">Click Multiple to Combine ⚡</span>
           </div>
 
-          {/* Results List with Checkboxes / Active Highlight */}
-          <div className="p-1 space-y-0.5">
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((opt, idx) => {
+          {/* Save custom preset banner */}
+          {onSaveCustom && !isAlreadyInPresets && customInput.trim() && (
+            <div className="p-2 bg-amber-50/90 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900/60 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-amber-900 dark:text-amber-200 truncate">
+                ⭐ Save "{customInput}" as custom instruction?
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onSaveCustom(customInput.trim());
+                }}
+                className="h-6 px-2 text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-bold shrink-0 cursor-pointer"
+              >
+                + Save
+              </Button>
+            </div>
+          )}
+
+          {/* Custom presets */}
+          {filteredCustom.length > 0 && (
+            <div className="p-1 space-y-0.5 bg-amber-50/30 dark:bg-amber-950/20">
+              <div className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-400">
+                ⭐ My Custom Guidelines ({filteredCustom.length})
+              </div>
+              {filteredCustom.map((opt, idx) => {
                 const isSelected = activeInstructions.includes(opt.trim());
                 return (
                   <div
-                    key={idx}
+                    key={`c-${idx}`}
                     onMouseDown={(e) => {
-                      e.preventDefault(); // Keep input focused
+                      e.preventDefault();
                       toggleInstruction(opt);
                     }}
-                    className={`px-3 py-2 text-xs rounded-xl cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                    className={`px-3 py-1.5 text-xs rounded-xl cursor-pointer transition-all flex items-center justify-between gap-2 ${
                       isSelected
-                        ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-900 dark:text-teal-200 font-bold border border-teal-300 dark:border-teal-700'
-                        : 'hover:bg-stone-100 dark:hover:bg-stone-800/80 text-stone-800 dark:text-stone-200 font-medium'
+                        ? 'bg-amber-200 dark:bg-amber-950 text-amber-900 dark:text-amber-200 font-bold border border-amber-300'
+                        : 'hover:bg-amber-100/60 text-stone-900 dark:text-stone-100 font-semibold'
                     }`}
                   >
-                    <span className="flex-1 leading-snug">{opt}</span>
-                    {isSelected ? (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-teal-600 text-white font-bold flex items-center gap-1 shrink-0">
-                        <Check className="w-3 h-3" /> Added
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-stone-400 group-hover:text-teal-600 font-semibold shrink-0">
-                        + Add
-                      </span>
-                    )}
+                    <span className="flex-1 leading-snug">⭐ {opt}</span>
+                    <div className="flex items-center gap-1.5">
+                      {isSelected ? (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] bg-teal-600 text-white font-bold flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Added
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-amber-700 font-bold">+ Add</span>
+                      )}
+                      {onDeleteCustom && (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onDeleteCustom(opt);
+                          }}
+                          className="text-stone-400 hover:text-rose-600 p-0.5"
+                          title="Delete Custom"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
-              })
-            ) : (
-              <div className="p-4 text-center text-xs text-stone-500 italic">
-                No matching preset found. Press "Add" to include your custom instruction!
-              </div>
-            )}
+              })}
+            </div>
+          )}
+
+          {/* Standard Presets */}
+          <div className="p-1 space-y-0.5">
+            {filteredOptions.map((opt, idx) => {
+              const isSelected = activeInstructions.includes(opt.trim());
+              return (
+                <div
+                  key={`std-${idx}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    toggleInstruction(opt);
+                  }}
+                  className={`px-3 py-2 text-xs rounded-xl cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                    isSelected
+                      ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-900 dark:text-teal-200 font-bold border border-teal-300 dark:border-teal-700'
+                      : 'hover:bg-stone-100 dark:hover:bg-stone-800/80 text-stone-800 dark:text-stone-200 font-medium'
+                  }`}
+                >
+                  <span className="flex-1 leading-snug">{opt}</span>
+                  {isSelected ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] bg-teal-600 text-white font-bold flex items-center gap-1 shrink-0">
+                      <Check className="w-3 h-3" /> Added
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-stone-400 group-hover:text-teal-600 font-semibold shrink-0">
+                      + Add
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Selected Instruction Badges / Pills */}
+      {/* Selected Instruction Badges */}
       {activeInstructions.length > 0 && (
         <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-teal-50/50 dark:bg-stone-800/40 border border-teal-200/60 dark:border-stone-700">
           {activeInstructions.map((item, idx) => (
@@ -370,7 +632,7 @@ const MultiSpecialInstructionInput: React.FC<MultiSpecialInstructionProps> = ({
         </div>
       )}
 
-      {/* Input Box for searching or typing custom instructions */}
+      {/* Input Box */}
       <div className="flex gap-1.5">
         <div className="relative flex-1">
           <Input
@@ -459,6 +721,92 @@ export default function ConsultationView() {
   const completeAndCallNextMutation = useCompleteAndCallNext();
 
   const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [customPresetsModalOpen, setCustomPresetsModalOpen] = useState(false);
+
+  // Doctor Personal Custom Presets State (Persisted in localStorage)
+  const [customPresets, setCustomPresets] = useState<DoctorCustomPresets>(getInitialCustomPresets);
+
+  // New Custom Drug Creation Form in Modal
+  const [newDrugName, setNewDrugName] = useState('');
+  const [newDrugGeneric, setNewDrugGeneric] = useState('');
+  const [newDrugCategory, setNewDrugCategory] = useState('General Medicine');
+  const [newDrugDosage, setNewDrugDosage] = useState('500 mg');
+  const [newDrugFrequency, setNewDrugFrequency] = useState('1-0-1');
+  const [newDrugDuration, setNewDrugDuration] = useState('5 Days');
+  const [newDrugInstructions, setNewDrugInstructions] = useState('Take after meals with plenty of water.');
+
+  const saveCustomPresetsToStorage = (updated: DoctorCustomPresets) => {
+    setCustomPresets(updated);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.error("Failed to save custom presets", e);
+    }
+  };
+
+  const handleAddCustomPreset = (field: keyof DoctorCustomPresets, value: string) => {
+    if (!value || !value.trim()) return;
+    const clean = value.trim();
+    if ((customPresets[field] as string[]).includes(clean)) return;
+
+    const updated = {
+      ...customPresets,
+      [field]: [clean, ...(customPresets[field] as string[])],
+    };
+    saveCustomPresetsToStorage(updated);
+    toast({
+      title: "Preset Saved! ⭐",
+      description: `"${clean}" added to your custom presets and will appear on top!`,
+      variant: "success",
+    });
+  };
+
+  const handleDeleteCustomPreset = (field: keyof DoctorCustomPresets, value: string) => {
+    const updated = {
+      ...customPresets,
+      [field]: (customPresets[field] as any[]).filter((item) => {
+        if (typeof item === 'string') return item !== value;
+        return item.name !== value;
+      }),
+    };
+    saveCustomPresetsToStorage(updated);
+    toast({
+      title: "Preset Removed",
+      description: `Removed from your custom presets.`,
+    });
+  };
+
+  const handleAddCustomDrug = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDrugName.trim() || !newDrugGeneric.trim()) {
+      toast({ title: "Validation Error", description: "Medicine name and generic formula required.", variant: "destructive" });
+      return;
+    }
+
+    const newDrug: DrugInfo = {
+      name: newDrugName.trim(),
+      generic: newDrugGeneric.trim(),
+      category: newDrugCategory.trim() || 'General Medicine',
+      defaultDosage: newDrugDosage.trim() || '500 mg',
+      dosageOptions: [newDrugDosage.trim() || '500 mg'],
+      defaultFrequency: newDrugFrequency.trim() || '1-0-1',
+      defaultDuration: newDrugDuration.trim() || '5 Days',
+      defaultInstructions: newDrugInstructions.trim() || 'After meals with water.',
+    };
+
+    const updated = {
+      ...customPresets,
+      medicines: [newDrug, ...customPresets.medicines],
+    };
+    saveCustomPresetsToStorage(updated);
+    setNewDrugName('');
+    setNewDrugGeneric('');
+    toast({
+      title: "Custom Drug Added! 💊",
+      description: `${newDrug.name} is now available in your personal catalog!`,
+      variant: "success",
+    });
+  };
 
   const vitalsForm = useForm<VitalsFormValues>({
     resolver: zodResolver(vitalsSchema),
@@ -519,7 +867,6 @@ export default function ConsultationView() {
     }
   }, [prescriptionData, prescriptionForm]);
 
-  // Handle drug auto-population across all 5 fields
   const handleDrugAutoPopulate = (index: number, drug: DrugInfo) => {
     prescriptionForm.setValue(`medicines.${index}.medicineName`, drug.name, { shouldDirty: true, shouldValidate: true });
     prescriptionForm.setValue(`medicines.${index}.dosage`, drug.defaultDosage, { shouldDirty: true, shouldValidate: true });
@@ -564,11 +911,9 @@ export default function ConsultationView() {
     }
   };
 
-  // 1-Click "Sign Rx & Call Next Patient"
   const handleSignAndCallNext = async () => {
     setIsProcessingAction(true);
     try {
-      // 1. Auto-save prescription if medicines entered
       const rxValues = prescriptionForm.getValues();
       const validMeds = (rxValues.medicines || []).filter(m => m.medicineName?.trim());
       if (validMeds.length > 0 || rxValues.notes?.trim()) {
@@ -581,7 +926,6 @@ export default function ConsultationView() {
         });
       }
 
-      // 2. Auto-save vitals if filled
       const vitalsValues = vitalsForm.getValues();
       if (vitalsValues.bloodPressure || vitalsValues.weight || vitalsValues.temperature) {
         const heightM = (vitalsValues.height || 0) / 100;
@@ -594,7 +938,6 @@ export default function ConsultationView() {
         });
       }
 
-      // 3. Atomically Complete Current & Call Next
       const result: any = await completeAndCallNextMutation.mutateAsync({
         appointmentId: appointmentId!,
         doctorId: appointment?.doctorId,
@@ -711,7 +1054,18 @@ export default function ConsultationView() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* ⚙️ Doctor Personal Custom Presets Manager Button */}
+          <Button 
+            variant="outline"
+            size="sm"
+            onClick={() => setCustomPresetsModalOpen(true)}
+            className="text-xs font-bold gap-1.5 h-9 border-amber-300 text-amber-900 dark:text-amber-300 bg-amber-50/60 dark:bg-amber-950/40 hover:bg-amber-100"
+          >
+            <Settings className="h-3.5 w-3.5 text-amber-600" />
+            <span>⚙️ Customise Presets</span>
+          </Button>
+
           <Button 
             variant="outline" 
             size="sm" 
@@ -758,7 +1112,6 @@ export default function ConsultationView() {
                 Complete Only
               </Button>
 
-              {/* ⚡ 1-CLICK SIGN & CALL NEXT BUTTON */}
               <Button 
                 onClick={handleSignAndCallNext} 
                 disabled={isProcessingAction || completeAndCallNextMutation.isPending}
@@ -848,7 +1201,7 @@ export default function ConsultationView() {
             </CardContent>
           </Card>
 
-          {/* Vitals Form Card */}
+          {/* Vitals Form Card with Custom Presets Support */}
           <Card className="border border-stone-200 dark:border-stone-800 shadow-sm">
             <CardHeader className="pb-3 border-b border-stone-100 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-900/60">
               <div className="flex items-center justify-between">
@@ -861,7 +1214,7 @@ export default function ConsultationView() {
                   variant="ghost"
                   onClick={vitalsForm.handleSubmit(onSaveVitals)} 
                   disabled={saveVitalsMutation.isPending}
-                  className="h-7 text-xs font-bold text-teal-700 dark:text-teal-400 gap-1 hover:bg-teal-50"
+                  className="h-7 text-xs font-bold text-teal-700 dark:text-teal-400 gap-1 hover:bg-teal-50 cursor-pointer"
                 >
                   <Save className="h-3 w-3" /> Save
                 </Button>
@@ -875,22 +1228,28 @@ export default function ConsultationView() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <UpsideAutoSuggestInput
                       label="Blood Pressure"
-                      sublabel="30+ Presets"
+                      sublabel="47+ Clinical Presets"
                       value={vitalsForm.watch('bloodPressure') || ''}
                       onChange={(val) => vitalsForm.setValue('bloodPressure', val.split(' ')[0], { shouldDirty: true })}
                       options={UNIVERSAL_BP_OPTIONS}
+                      customOptions={customPresets.bp}
+                      onSaveCustom={(val) => handleAddCustomPreset('bp', val)}
+                      onDeleteCustom={(val) => handleDeleteCustomPreset('bp', val)}
                       placeholder="e.g. 120/80 mmHg"
                     />
 
                     <UpsideAutoSuggestInput
                       label="Heart Rate (BPM)"
-                      sublabel="25+ Presets"
+                      sublabel="48+ Presets"
                       value={vitalsForm.watch('heartRate') ? String(vitalsForm.watch('heartRate')) : ''}
                       onChange={(val) => {
                         const num = parseInt(val.replace(/\D/g, ''), 10);
                         vitalsForm.setValue('heartRate', isNaN(num) ? 0 : num, { shouldDirty: true });
                       }}
                       options={UNIVERSAL_HEART_RATE_OPTIONS}
+                      customOptions={customPresets.heartRate}
+                      onSaveCustom={(val) => handleAddCustomPreset('heartRate', val)}
+                      onDeleteCustom={(val) => handleDeleteCustomPreset('heartRate', val)}
                       placeholder="e.g. 72 bpm"
                     />
                   </div>
@@ -898,7 +1257,7 @@ export default function ConsultationView() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <UpsideAutoSuggestInput
                       label="Temperature (°F)"
-                      sublabel="18+ Presets"
+                      sublabel="33+ Presets"
                       value={vitalsForm.watch('temperature') ? String(vitalsForm.watch('temperature')) : ''}
                       onChange={(val) => {
                         const match = val.match(/\d+(\.\d+)?/);
@@ -906,18 +1265,24 @@ export default function ConsultationView() {
                         vitalsForm.setValue('temperature', num, { shouldDirty: true });
                       }}
                       options={UNIVERSAL_TEMP_OPTIONS}
+                      customOptions={customPresets.temperature}
+                      onSaveCustom={(val) => handleAddCustomPreset('temperature', val)}
+                      onDeleteCustom={(val) => handleDeleteCustomPreset('temperature', val)}
                       placeholder="e.g. 98.6 °F"
                     />
 
                     <UpsideAutoSuggestInput
                       label="SpO2 (%)"
-                      sublabel="13+ Presets"
+                      sublabel="23+ Presets"
                       value={vitalsForm.watch('spo2') ? String(vitalsForm.watch('spo2')) : ''}
                       onChange={(val) => {
                         const num = parseInt(val.replace(/\D/g, ''), 10);
                         vitalsForm.setValue('spo2', isNaN(num) ? 0 : num, { shouldDirty: true });
                       }}
                       options={UNIVERSAL_SPO2_OPTIONS}
+                      customOptions={customPresets.spo2}
+                      onSaveCustom={(val) => handleAddCustomPreset('spo2', val)}
+                      onDeleteCustom={(val) => handleDeleteCustomPreset('spo2', val)}
                       placeholder="e.g. 99%"
                     />
                   </div>
@@ -931,6 +1296,9 @@ export default function ConsultationView() {
                         vitalsForm.setValue('weight', isNaN(num) ? 0 : num, { shouldDirty: true });
                       }}
                       options={UNIVERSAL_WEIGHT_OPTIONS}
+                      customOptions={customPresets.weight}
+                      onSaveCustom={(val) => handleAddCustomPreset('weight', val)}
+                      onDeleteCustom={(val) => handleDeleteCustomPreset('weight', val)}
                       placeholder="70"
                     />
 
@@ -942,6 +1310,9 @@ export default function ConsultationView() {
                         vitalsForm.setValue('height', isNaN(num) ? 0 : num, { shouldDirty: true });
                       }}
                       options={UNIVERSAL_HEIGHT_OPTIONS}
+                      customOptions={customPresets.height}
+                      onSaveCustom={(val) => handleAddCustomPreset('height', val)}
+                      onDeleteCustom={(val) => handleDeleteCustomPreset('height', val)}
                       placeholder="170"
                     />
 
@@ -969,7 +1340,7 @@ export default function ConsultationView() {
                     <span>Digital Rx Prescription & Medications</span>
                   </CardTitle>
                   <CardDescription className="text-xs text-stone-500 mt-0.5">
-                    Live upside auto-suggestions active for all 5 fields. Type or pick from 70+ medical choices.
+                    Live upside auto-suggestions + personal customization active for all fields.
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1005,7 +1376,7 @@ export default function ConsultationView() {
                                 type="button" 
                                 variant="ghost" 
                                 size="sm" 
-                                className="h-7 px-2 text-rose-600 hover:bg-rose-50 text-[11px] font-bold"
+                                className="h-7 px-2 text-rose-600 hover:bg-rose-50 text-[11px] font-bold cursor-pointer"
                                 onClick={() => removeMed(index)}
                               >
                                 <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove Drug
@@ -1013,47 +1384,61 @@ export default function ConsultationView() {
                             )}
                           </div>
 
-                          {/* 1. Medicine Name & Generic Formula (Upside Floating Suggestions) */}
+                          {/* 1. Medicine Name & Generic Formula */}
                           <UpsideAutoSuggestInput
                             label="1. Medicine Name & Generic Formula"
                             sublabel="⚡ Auto-fills Dosage, Frequency, Duration & Instructions"
                             value={currentMed.medicineName || ''}
                             onChange={(val) => prescriptionForm.setValue(`medicines.${index}.medicineName`, val, { shouldDirty: true })}
                             options={UNIVERSAL_DRUG_DATABASE}
+                            customOptions={customPresets.medicines}
+                            onSaveCustom={(val) => {
+                              handleAddCustomPreset('medicines', val);
+                            }}
+                            onDeleteCustom={(val) => handleDeleteCustomPreset('medicines', val)}
                             isDrugName={true}
                             onDrugSelect={(drug) => handleDrugAutoPopulate(index, drug)}
                             placeholder="Type or search medicine (e.g. Paracetamol 650mg, Augmentin 625, Pan-D, Telma-AM...)"
                           />
 
-                          {/* Row 2: Dosage & Frequency (Upside Floating Suggestions) */}
+                          {/* Row 2: Dosage & Frequency */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <UpsideAutoSuggestInput
                               label="2. Dosage / Strength"
-                              sublabel="84+ Medical Strengths"
+                              sublabel="84+ Strengths + Custom"
                               value={currentMed.dosage || ''}
                               onChange={(val) => prescriptionForm.setValue(`medicines.${index}.dosage`, val, { shouldDirty: true })}
                               options={UNIVERSAL_DOSAGE_OPTIONS}
+                              customOptions={customPresets.dosages}
+                              onSaveCustom={(val) => handleAddCustomPreset('dosages', val)}
+                              onDeleteCustom={(val) => handleDeleteCustomPreset('dosages', val)}
                               placeholder="Type or pick dose (e.g. 650 mg, 500 mg, 10 ml, 2 puffs...)"
                             />
 
                             <UpsideAutoSuggestInput
                               label="3. Frequency / Clinical Pattern"
-                              sublabel="72+ Patterns"
+                              sublabel="72+ Patterns + Custom"
                               value={currentMed.frequency || ''}
                               onChange={(val) => prescriptionForm.setValue(`medicines.${index}.frequency`, val, { shouldDirty: true })}
                               options={UNIVERSAL_FREQUENCY_OPTIONS}
+                              customOptions={customPresets.frequencies}
+                              onSaveCustom={(val) => handleAddCustomPreset('frequencies', val)}
+                              onDeleteCustom={(val) => handleDeleteCustomPreset('frequencies', val)}
                               placeholder="Type or pick pattern (e.g. 1-0-1, 1-0-0 Empty Stomach, SOS...)"
                             />
                           </div>
 
-                          {/* Row 3: Duration & Special Instructions (Multi-Instruction Support) */}
+                          {/* Row 3: Duration & Special Instructions */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <UpsideAutoSuggestInput
                               label="4. Duration"
-                              sublabel="72+ Durations"
+                              sublabel="72+ Durations + Custom"
                               value={currentMed.duration || ''}
                               onChange={(val) => prescriptionForm.setValue(`medicines.${index}.duration`, val, { shouldDirty: true })}
                               options={UNIVERSAL_DURATION_OPTIONS}
+                              customOptions={customPresets.durations}
+                              onSaveCustom={(val) => handleAddCustomPreset('durations', val)}
+                              onDeleteCustom={(val) => handleDeleteCustomPreset('durations', val)}
                               placeholder="Type or pick duration (e.g. 5 Days, 1 Month, Weekly for 8 Weeks...)"
                             />
 
@@ -1063,6 +1448,9 @@ export default function ConsultationView() {
                               value={currentMed.instructions || ''}
                               onChange={(val) => prescriptionForm.setValue(`medicines.${index}.instructions`, val, { shouldDirty: true })}
                               options={UNIVERSAL_INSTRUCTIONS_OPTIONS}
+                              customOptions={customPresets.instructions}
+                              onSaveCustom={(val) => handleAddCustomPreset('instructions', val)}
+                              onDeleteCustom={(val) => handleDeleteCustomPreset('instructions', val)}
                               placeholder="Type or pick multiple instructions..."
                             />
                           </div>
@@ -1104,6 +1492,157 @@ export default function ConsultationView() {
           </Card>
         </div>
       </div>
+
+      {/* ⚙️ DOCTOR'S PERSONAL PRESET CUSTOMIZATION MODAL */}
+      {customPresetsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-stone-900 rounded-3xl border border-stone-200 dark:border-stone-800 shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="p-5 border-b border-stone-200 dark:border-stone-800 flex items-center justify-between bg-amber-50/60 dark:bg-stone-800/60">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500 text-white">
+                  <Settings className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-stone-900 dark:text-white flex items-center gap-2">
+                    Doctor's Personal Customization Center
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    Add, edit, or delete your own custom medicines, dosages, instructions, and vitals presets.
+                  </p>
+                </div>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setCustomPresetsModalOpen(false)}
+                className="h-8 w-8 p-0 rounded-full"
+              >
+                ✕
+              </Button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-6">
+              {/* Form: Add New Custom Medicine */}
+              <div className="p-4 rounded-2xl bg-teal-50/50 dark:bg-teal-950/20 border border-teal-200/80 dark:border-teal-800/60 space-y-3.5">
+                <div className="text-xs font-black text-teal-900 dark:text-teal-200 flex items-center gap-1.5 uppercase tracking-wider">
+                  <Pill className="w-4 h-4 text-teal-600" /> Add New Custom Medicine / Formulation
+                </div>
+                <form onSubmit={handleAddCustomDrug} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-[11px] font-bold">Brand Name / Display Name *</Label>
+                      <Input
+                        placeholder="e.g. MySpecialSyrup 100mg"
+                        value={newDrugName}
+                        onChange={(e) => setNewDrugName(e.target.value)}
+                        className="h-8 text-xs mt-1"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] font-bold">Generic Formula / Composition *</Label>
+                      <Input
+                        placeholder="e.g. Paracetamol 250mg + Vit C 50mg"
+                        value={newDrugGeneric}
+                        onChange={(e) => setNewDrugGeneric(e.target.value)}
+                        className="h-8 text-xs mt-1"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div>
+                      <Label className="text-[11px] font-bold">Default Dosage</Label>
+                      <Input
+                        placeholder="e.g. 5 ml"
+                        value={newDrugDosage}
+                        onChange={(e) => setNewDrugDosage(e.target.value)}
+                        className="h-8 text-xs mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] font-bold">Default Frequency</Label>
+                      <Input
+                        placeholder="e.g. 1-0-1"
+                        value={newDrugFrequency}
+                        onChange={(e) => setNewDrugFrequency(e.target.value)}
+                        className="h-8 text-xs mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] font-bold">Default Duration</Label>
+                      <Input
+                        placeholder="e.g. 5 Days"
+                        value={newDrugDuration}
+                        onChange={(e) => setNewDrugDuration(e.target.value)}
+                        className="h-8 text-xs mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <Button type="submit" size="sm" className="h-8 text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white gap-1.5 cursor-pointer">
+                      <Plus className="w-3.5 h-3.5" /> Save to My Medicine Catalog
+                    </Button>
+                  </div>
+                </form>
+              </div>
+
+              {/* List of Custom Medicines */}
+              <div className="space-y-2">
+                <div className="text-xs font-black text-stone-800 dark:text-stone-200 uppercase tracking-wider flex items-center justify-between">
+                  <span>My Saved Custom Medicines ({customPresets.medicines.length})</span>
+                </div>
+                {customPresets.medicines.length > 0 ? (
+                  <div className="divide-y divide-stone-100 dark:divide-stone-800 border rounded-xl overflow-hidden">
+                    {customPresets.medicines.map((med, idx) => (
+                      <div key={idx} className="p-3 bg-white dark:bg-stone-900 flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-xs text-stone-900 dark:text-stone-100">{med.name}</div>
+                          <div className="text-[11px] text-stone-500">Formula: {med.generic} • {med.defaultDosage} • {med.defaultFrequency}</div>
+                        </div>
+                        <Button 
+                          type="button"
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleDeleteCustomPreset('medicines', med.name)}
+                          className="h-7 text-xs text-rose-600 hover:bg-rose-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 border border-dashed rounded-xl text-center text-xs text-stone-400">
+                    No custom medicines created yet. Use the form above to add one.
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Preset Counts Summary */}
+              <div className="p-4 rounded-2xl bg-stone-50 dark:bg-stone-800/40 border border-stone-200 dark:border-stone-700 space-y-2 text-xs">
+                <div className="font-bold text-stone-800 dark:text-stone-200">💡 Custom Preset Memory Status:</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-stone-600 dark:text-stone-300">
+                  <div>💊 Medicines: <strong>{customPresets.medicines.length}</strong></div>
+                  <div>⚖️ Dosages: <strong>{customPresets.dosages.length}</strong></div>
+                  <div>🕒 Frequencies: <strong>{customPresets.frequencies.length}</strong></div>
+                  <div>📅 Durations: <strong>{customPresets.durations.length}</strong></div>
+                  <div>📝 Instructions: <strong>{customPresets.instructions.length}</strong></div>
+                  <div>🩺 Vitals Presets: <strong>{customPresets.bp.length + customPresets.heartRate.length + customPresets.temperature.length + customPresets.spo2.length + customPresets.weight.length + customPresets.height.length}</strong></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-stone-50 dark:bg-stone-800/50 border-t border-stone-200 dark:border-stone-800 text-right">
+              <Button size="sm" onClick={() => setCustomPresetsModalOpen(false)} className="text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white">
+                Done
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Bottom Quick-Action Bar */}
       {!isCompleted && (
