@@ -124,7 +124,153 @@ const AppointmentBookingContent = () => {
   };
 
   const handlePrintSlip = () => {
-    window.print();
+    if (!generatedSlip) return;
+
+    const tokenNum = generatedSlip.tokenNumber || generatedSlip.token_number || 'A-101';
+    const patientName = generatedSlip.patient?.fullName || generatedSlip.patient?.full_name || 'Walk-in Patient';
+    const patientCode = generatedSlip.patient?.patientCode || generatedSlip.patient?.patient_code || 'PT-00001';
+    const doctorName = generatedSlip.doctor?.fullName || generatedSlip.doctor?.full_name || 'Doctor';
+    const dept = generatedSlip.doctor?.department || 'General OPD';
+    const room = generatedSlip.doctor?.room || 'Cabin 101';
+    const fee = generatedSlip.doctor?.consultationFee || generatedSlip.doctor?.consultation_fee || 500;
+    const wait = generatedSlip.queueStats?.estimatedWaitFormatted || generatedSlip.queueStats?.estimated_wait_formatted || 'Next in Line';
+    const dateStr = generatedSlip.appointmentDate || new Date().toISOString().split('T')[0];
+    const timeStr = generatedSlip.appointmentTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const printWindow = window.open('', '_blank', 'width=450,height=650');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Token #${tokenNum} - Sanjeevani Hospital</title>
+          <style>
+            @page {
+              size: 80mm auto;
+              margin: 0mm;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              width: 76mm;
+              margin: 0 auto;
+              padding: 16px 8px;
+              color: #111;
+              box-sizing: border-box;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 2px dashed #333;
+              padding-bottom: 8px;
+              margin-bottom: 8px;
+            }
+            .hospital-name {
+              font-size: 13px;
+              font-weight: 900;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+            .subtitle {
+              font-size: 10px;
+              color: #444;
+              margin-top: 2px;
+            }
+            .token-box {
+              text-align: center;
+              padding: 12px 0;
+              border-bottom: 2px dashed #333;
+              margin-bottom: 8px;
+            }
+            .token-label {
+              font-size: 11px;
+              text-transform: uppercase;
+              font-weight: bold;
+              letter-spacing: 1px;
+              color: #444;
+            }
+            .token-number {
+              font-size: 46px;
+              font-weight: 900;
+              font-family: "Courier New", monospace;
+              margin: 4px 0;
+              line-height: 1;
+            }
+            .wait-badge {
+              display: inline-block;
+              font-size: 10px;
+              font-weight: bold;
+              padding: 3px 8px;
+              border: 1px solid #111;
+              border-radius: 12px;
+              margin-top: 4px;
+            }
+            .details {
+              font-size: 11px;
+              line-height: 1.7;
+              border-bottom: 2px dashed #333;
+              padding-bottom: 8px;
+              margin-bottom: 8px;
+            }
+            .row {
+              display: flex;
+              justify-content: space-between;
+            }
+            .row span:first-child {
+              color: #555;
+            }
+            .row span:last-child {
+              font-weight: bold;
+              text-align: right;
+            }
+            .footer {
+              text-align: center;
+              font-size: 9px;
+              color: #555;
+              line-height: 1.4;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="hospital-name">Sanjeevani Multi-Specialty Hospital</div>
+            <div class="subtitle">OPD Patient Token Receipt</div>
+          </div>
+          
+          <div class="token-box">
+            <div class="token-label">Live OPD Token</div>
+            <div class="token-number">${tokenNum}</div>
+            <div class="wait-badge">Est. Wait: ${wait}</div>
+          </div>
+
+          <div class="details">
+            <div class="row"><span>Patient:</span> <span>${patientName}</span></div>
+            <div class="row"><span>Patient ID:</span> <span>${patientCode}</span></div>
+            <div class="row"><span>Doctor:</span> <span>Dr. ${doctorName}</span></div>
+            <div class="row"><span>Department:</span> <span>${dept}</span></div>
+            <div class="row"><span>Consultation Cabin:</span> <span>${room}</span></div>
+            <div class="row"><span>OPD Fee:</span> <span>Rs. ${fee}</span></div>
+            <div class="row"><span>Date & Time:</span> <span>${dateStr} ${timeStr}</span></div>
+          </div>
+
+          <div class="footer">
+            <div>Please be seated in the <strong>OPD Waiting Lounge</strong>.</div>
+            <div>Your token will be announced automatically on the TV screen.</div>
+            <div style="margin-top: 6px; font-weight: bold;">*** Thank You ***</div>
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.focus();
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const handleResetExpress = () => {

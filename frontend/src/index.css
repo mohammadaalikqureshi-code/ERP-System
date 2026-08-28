@@ -67,3 +67,13 @@
     font-family: 'Inter', sans-serif;
   }
 }
+
+@media print {
+  aside, nav, header, .no-print, button, .sidebar-container {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+}
