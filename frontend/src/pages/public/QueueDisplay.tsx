@@ -89,9 +89,14 @@ export default function QueueDisplay() {
   const emergencyData = queueData?.emergency;
   const isEmergencyActive = !!emergencyData && (emergencyData.status === 'checked_in' || emergencyData.status === 'CHECKED_IN');
 
+  const [silencedEmergencyToken, setSilencedEmergencyToken] = useState<string | null>(null);
+
   useEffect(() => {
-    if (isEmergencyActive) {
-      const token = emergencyData.token_number || emergencyData.tokenNumber || 'EMG-01';
+    const currentEmergencyToken = emergencyData?.token_number || emergencyData?.tokenNumber;
+    const isSilenced = silencedEmergencyToken === currentEmergencyToken;
+
+    if (isEmergencyActive && !isSilenced) {
+      const token = currentEmergencyToken || 'EMG-01';
       const patientName = emergencyData.patient_name || emergencyData.patientName || 'Emergency Patient';
       const doc = emergencyData.doctor_name || emergencyData.doctorName || 'Doctor';
       const dept = emergencyData.department || 'Emergency OPD Consultation Room';
@@ -110,7 +115,7 @@ export default function QueueDisplay() {
       if (emergencyIntervalRef.current) clearInterval(emergencyIntervalRef.current);
       emergencyIntervalRef.current = setInterval(announceEmergency, 10000);
     } else {
-      // Patient reached the doctor or emergency resolved: STOP AUDIO LOOP IMMEDIATELY!
+      // Patient reached doctor OR silenced: STOP AUDIO LOOP IMMEDIATELY!
       if (emergencyIntervalRef.current) {
         clearInterval(emergencyIntervalRef.current);
         emergencyIntervalRef.current = null;
@@ -124,7 +129,23 @@ export default function QueueDisplay() {
         emergencyIntervalRef.current = null;
       }
     };
-  }, [isEmergencyActive, emergencyData, speak]);
+  }, [isEmergencyActive, emergencyData, silencedEmergencyToken, speak]);
+
+  // Handle manual silencing of the emergency voice alarm
+  const handleSilenceEmergencyAlarm = () => {
+    const currentToken = emergencyData?.token_number || emergencyData?.tokenNumber;
+    if (silencedEmergencyToken === currentToken) {
+      setSilencedEmergencyToken(null);
+      speak('Emergency voice alert resumed', true);
+    } else {
+      setSilencedEmergencyToken(currentToken);
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      if (emergencyIntervalRef.current) {
+        clearInterval(emergencyIntervalRef.current);
+        emergencyIntervalRef.current = null;
+      }
+    }
+  };
 
   // Regular Consultation Room Call Announcement
   useEffect(() => {
@@ -204,10 +225,28 @@ export default function QueueDisplay() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-center px-7 py-3 rounded-2xl bg-black/50 border-2 border-amber-300 shadow-xl">
-              <div className="text-[11px] uppercase tracking-widest text-amber-300 font-black">Emergency Token</div>
-              <div className="text-5xl md:text-6xl font-black font-mono text-white tracking-wider drop-shadow-[0_0_20px_rgba(255,255,255,0.8)]">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSilenceEmergencyAlarm}
+              className="px-4 py-2.5 rounded-xl bg-black/60 hover:bg-black/80 text-white font-bold text-xs border border-white/30 flex items-center gap-1.5 transition-all shadow-lg cursor-pointer shrink-0"
+              title="Click to silence/resume continuous emergency voice alarm"
+            >
+              {silencedEmergencyToken === (emergencyData.token_number || emergencyData.tokenNumber) ? (
+                <>
+                  <Volume2 className="w-4 h-4 text-emerald-400" />
+                  <span>Resume Voice Alarm</span>
+                </>
+              ) : (
+                <>
+                  <VolumeX className="w-4 h-4 text-amber-300" />
+                  <span>🔕 Silence Alarm</span>
+                </>
+              )}
+            </button>
+
+            <div className="text-center px-6 py-2.5 rounded-2xl bg-black/50 border-2 border-amber-300 shadow-xl">
+              <div className="text-[10px] uppercase tracking-widest text-amber-300 font-black">Emergency Token</div>
+              <div className="text-4xl md:text-5xl font-black font-mono text-white tracking-wider drop-shadow-[0_0_20px_rgba(255,255,255,0.8)]">
                 {emergencyData.token_number || emergencyData.tokenNumber}
               </div>
             </div>

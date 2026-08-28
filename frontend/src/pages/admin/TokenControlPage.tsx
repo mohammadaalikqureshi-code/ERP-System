@@ -24,8 +24,7 @@ import {
   TrendingUp,
   Flame,
   HeartPulse,
-  Info,
-  ExternalLink
+  VolumeX,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,19 +32,11 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogDescription,
-  DialogFooter
-} from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/components/ui/use-toast';
 import { useDoctors } from '@/api/doctors';
-import { useAdminLiveTokens, useBoostEmergencyToken, AdminTokenFilters } from '@/api/appointments';
+import { useAdminLiveTokens, useBoostEmergencyToken, useUpdateAppointmentStatus, AdminTokenFilters } from '@/api/appointments';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { Doctor } from '@/types';
 import { cn } from '@/lib/utils';
@@ -60,10 +51,6 @@ export default function TokenControlPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'emergency' | 'waiting' | 'in_consultation' | 'completed'>('all');
   const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
 
-  // Selected Token for Detail Modal Dialog
-  const [selectedToken, setSelectedToken] = useState<any | null>(null);
-  const [detailModalOpen, setDetailModalOpen] = useState(false);
-
   // Doctors list for filter
   const { data: doctors = [] } = useDoctors();
 
@@ -77,6 +64,23 @@ export default function TokenControlPage() {
 
   const { data, isLoading, refetch, isFetching } = useAdminLiveTokens(filters);
   const { mutate: boostEmergency, isPending: isBoosting } = useBoostEmergencyToken();
+  const { mutate: updateStatus } = useUpdateAppointmentStatus();
+
+  // Silence Alarm & Move to Cabin
+  const handleSilenceAndMoveToCabin = (tokenItem: any) => {
+    updateStatus(
+      { id: tokenItem.id, status: 'in_consultation' },
+      {
+        onSuccess: () => {
+          toast({
+            title: '🔕 Emergency Alarm Silenced',
+            description: `Token #${tokenItem.tokenNumber} (${tokenItem.patient?.fullName || 'Patient'}) called to doctor cabin. Alarm stopped immediately.`,
+          });
+          refetch();
+        },
+      }
+    );
+  };
 
   // Real-time WebSocket connection for instant token sync
   const { isConnected } = useWebSocket({
@@ -100,12 +104,6 @@ export default function TokenControlPage() {
 
   const tokens: any[] = data?.tokens || [];
 
-  // Open Full Detail Modal when a token is clicked
-  const handleOpenDetailModal = (tokenItem: any) => {
-    setSelectedToken(tokenItem);
-    setDetailModalOpen(true);
-  };
-
   // Super Admin 1-Click Promote to Emergency
   const handlePromoteToEmergency = (tokenItem: any) => {
     boostEmergency(tokenItem.id, {
@@ -115,9 +113,6 @@ export default function TokenControlPage() {
           description: `Token #${tokenItem.tokenNumber} (${tokenItem.patient?.fullName || 'Patient'}) elevated to Emergency Priority 1 with live TV screen announcement.`,
           variant: 'destructive',
         });
-        if (selectedToken?.id === tokenItem.id) {
-          setSelectedToken((prev: any) => prev ? { ...prev, isEmergency: true, visitType: 'emergency', tokenNumber: res.token_number || prev.tokenNumber } : null);
-        }
       },
       onError: (err: any) => {
         toast({
@@ -276,7 +271,7 @@ export default function TokenControlPage() {
               </span>
             </div>
             <p className="text-xs sm:text-sm text-stone-500 font-medium mt-1">
-              Click any token card below to inspect full patient details, reprint slips, or promote to emergency.
+              Centralized real-time monitoring and management of all hospital OPD and Emergency Tokens.
             </p>
           </div>
         </div>
@@ -475,11 +470,11 @@ export default function TokenControlPage() {
         </CardContent>
       </Card>
 
-      {/* 📋 CLEAN MINIMALIST TOKENS GRID (SHOWS TOKEN NO. & PATIENT NAME ONLY) */}
+      {/* 📋 LIVE TOKENS GRID / CARDS VIEW */}
       {isLoading ? (
         <div className="p-16 text-center text-muted-foreground">
           <LoadingSpinner size="lg" />
-          <p className="mt-3 text-sm font-semibold">Loading live tokens...</p>
+          <p className="mt-3 text-sm font-semibold">Loading live token command center...</p>
         </div>
       ) : tokens.length === 0 ? (
         <Card className="border-dashed p-12 text-center text-muted-foreground">
@@ -490,244 +485,166 @@ export default function TokenControlPage() {
           </p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {tokens.map((t) => {
             const isEmergency = t.isEmergency || t.tokenNumber?.startsWith('EMG');
             const isActiveInRoom = t.status === 'in_consultation' || t.status === 'IN_CONSULTATION';
             const isWaiting = t.status === 'checked_in' || t.status === 'booked' || t.status === 'scheduled';
             const isCompleted = t.status === 'completed' || t.status === 'COMPLETED';
+            const docName = (t.doctor?.fullName || 'OPD').replace(/^Dr\.?\s*/i, '');
 
             return (
-              <div 
+              <Card 
                 key={t.id}
-                onClick={() => handleOpenDetailModal(t)}
                 className={cn(
-                  "group relative overflow-hidden transition-all border-2 rounded-2xl p-4 cursor-pointer shadow-sm hover:shadow-xl hover:-translate-y-1 select-none flex items-center justify-between gap-3",
+                  "relative overflow-hidden transition-all border-2 shadow-sm hover:shadow-md rounded-2xl flex flex-col justify-between",
                   isEmergency 
-                    ? "border-red-500 bg-gradient-to-r from-red-600/10 via-card to-card hover:border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.15)] ring-1 ring-red-500/40" 
+                    ? "border-red-500 bg-gradient-to-br from-red-950/20 via-card to-card shadow-[0_0_20px_rgba(239,68,68,0.15)] ring-1 ring-red-500/40" 
                     : isActiveInRoom
-                    ? "border-teal-500 bg-teal-50/20 dark:bg-teal-950/20 hover:border-teal-400"
-                    : "border-stone-200 dark:border-stone-800 bg-card hover:border-teal-500"
+                    ? "border-teal-500 bg-teal-50/20 dark:bg-teal-950/20"
+                    : "border-stone-200 dark:border-stone-800 bg-card"
                 )}
               >
-                {/* Emergency Top Indicator */}
+                {/* Emergency Top Stripe */}
                 {isEmergency && (
-                  <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-red-500 via-amber-400 to-red-500 animate-pulse" />
+                  <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white text-[11px] font-black uppercase tracking-wider px-3.5 py-1.5 flex items-center justify-between animate-pulse">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      CRITICAL EMERGENCY PRIORITY
+                    </span>
+                    <span className="bg-black/50 px-2 py-0.5 rounded font-mono text-[10px] font-bold">PRIORITY #1</span>
+                  </div>
                 )}
 
-                <div className="flex items-center gap-3.5 min-w-0">
-                  {/* Token Number Box (Compact, Bold, High-Contrast) */}
-                  <div className={cn(
-                    "min-w-[72px] h-[58px] rounded-xl flex flex-col items-center justify-center border-2 font-mono flex-shrink-0 shadow-sm px-1.5 transition-transform group-hover:scale-105",
-                    isEmergency 
-                      ? "bg-red-600 text-white border-red-400 shadow-red-500/40" 
-                      : isActiveInRoom
-                      ? "bg-teal-600 text-white border-teal-400 shadow-teal-500/30"
-                      : "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-stone-300 dark:border-stone-700"
-                  )}>
-                    <span className={cn("text-[9px] font-extrabold uppercase tracking-wider", isEmergency ? "text-amber-200" : "text-stone-400")}>
-                      {isEmergency ? "EMG" : "TOKEN"}
-                    </span>
-                    <span className="text-xl font-black tracking-tight whitespace-nowrap">
-                      {t.tokenNumber}
-                    </span>
+                <CardContent className="p-5 space-y-4">
+                  {/* Token Header Row */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      {/* Token Number Box (Wide, Bold, Single Line) */}
+                      <div className={cn(
+                        "min-w-[82px] h-[72px] rounded-2xl flex flex-col items-center justify-center border-2 font-mono flex-shrink-0 shadow-sm px-2",
+                        isEmergency 
+                          ? "bg-red-600 text-white border-red-400 shadow-red-500/30" 
+                          : isActiveInRoom
+                          ? "bg-teal-600 text-white border-teal-400"
+                          : "bg-stone-100 dark:bg-stone-800 text-teal-700 dark:text-teal-400 border-stone-200 dark:border-stone-700"
+                      )}>
+                        <span className={cn("text-[10px] font-bold uppercase tracking-wider", isEmergency ? "text-amber-200" : "text-stone-400")}>
+                          {isEmergency ? "EMG" : "TOKEN"}
+                        </span>
+                        <span className="text-2xl font-black tracking-tight whitespace-nowrap">
+                          {t.tokenNumber}
+                        </span>
+                      </div>
+
+                      {/* Patient Info */}
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="text-base sm:text-lg font-black text-stone-900 dark:text-white truncate">
+                          {t.patient?.fullName || 'Walk-in Patient'}
+                        </div>
+
+                        {/* Patient Tags Row (Clean & Readable) */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 font-mono text-[11px] font-bold border border-stone-200/60 dark:border-stone-700">
+                            {t.patient?.patientCode || 'PT-00000'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 text-[11px] font-semibold">
+                            {t.patient?.age || '-'}Y • {t.patient?.gender || '-'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-950/70 text-red-700 dark:text-red-300 text-[11px] font-bold border border-red-200 dark:border-red-900">
+                            🩸 {t.patient?.bloodGroup || 'O+'}
+                          </span>
+                        </div>
+
+                        {t.patient?.mobile && (
+                          <div className="text-xs font-semibold text-stone-500 dark:text-stone-400 flex items-center gap-1 font-mono">
+                            <Phone className="w-3 h-3 text-stone-400" />
+                            <span>{t.patient.mobile}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <StatusBadge status={t.status} />
                   </div>
 
-                  {/* Patient Name Only (Clean & Bold) */}
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <div className="text-base font-black text-stone-900 dark:text-white truncate group-hover:text-teal-600 transition-colors">
-                      {t.patient?.fullName || 'Walk-in Patient'}
+                  {/* Doctor & Department Banner */}
+                  <div className="p-3 rounded-xl bg-stone-50 dark:bg-stone-900 border border-stone-200/80 dark:border-stone-800 text-xs space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-stone-500 dark:text-stone-400 font-medium">Consulting Doctor:</span>
+                      <span className="font-bold text-stone-900 dark:text-stone-100 text-sm">Dr. {docName}</span>
                     </div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-1 font-medium">
-                      <span className="truncate">{t.doctor?.fullName ? `Dr. ${t.doctor.fullName.replace(/^Dr\.?\s*/i, '')}` : 'OPD'}</span>
+                    <div className="flex justify-between items-center">
+                      <span className="text-stone-500 dark:text-stone-400 font-medium">Department & Cabin:</span>
+                      <span className="font-bold text-teal-700 dark:text-teal-400">
+                        {t.department || t.doctor?.department || 'General OPD'} • {t.doctor?.room || 'Cabin 101'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-stone-500 pt-1.5 border-t border-stone-200 dark:border-stone-800">
+                      <span>Token Time: <strong className="font-mono text-stone-900 dark:text-stone-100 font-bold">{t.appointmentTime}</strong></span>
+                      <span>Queue Pos: <strong className="font-mono text-stone-900 dark:text-stone-100 font-bold">#{t.queueNumber}</strong></span>
                     </div>
                   </div>
-                </div>
 
-                {/* Status Badge */}
-                <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                  <StatusBadge status={t.status} />
-                  <span className="text-[10px] text-muted-foreground font-semibold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 text-teal-600">
-                    <span>Details</span>
-                    <ChevronRight className="w-3 h-3" />
-                  </span>
-                </div>
-              </div>
+                  {/* Notes / Reason */}
+                  {t.notes && (
+                    <div className="text-xs font-medium italic text-stone-600 dark:text-stone-300 bg-amber-50/60 dark:bg-amber-950/30 p-2.5 rounded-xl border border-amber-200/50">
+                      "{t.notes}"
+                    </div>
+                  )}
+
+                  {/* Super Admin Quick Actions */}
+                  <div className="pt-2 border-t border-stone-100 dark:border-stone-800 flex items-center justify-between gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePrintSlip(t)}
+                      className="text-xs font-bold gap-1.5 h-8 px-3 hover:bg-stone-100 dark:hover:bg-stone-800"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Print Slip</span>
+                    </Button>
+
+                    {isEmergency && isWaiting && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleSilenceAndMoveToCabin(t)}
+                        className="bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold gap-1.5 h-8 px-3 shadow-sm"
+                      >
+                        <VolumeX className="w-3.5 h-3.5 text-amber-300" />
+                        <span>🔕 Silence Alarm (Call to Cabin)</span>
+                      </Button>
+                    )}
+
+                    {!isEmergency && isWaiting && (
+                      <Button
+                        size="sm"
+                        onClick={() => handlePromoteToEmergency(t)}
+                        disabled={isBoosting}
+                        className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold gap-1.5 h-8 px-3 shadow-sm"
+                      >
+                        <Zap className="w-3.5 h-3.5 fill-current" />
+                        <span>Promote to Emergency</span>
+                      </Button>
+                    )}
+
+                    {isActiveInRoom && (
+                      <Button
+                        size="sm"
+                        onClick={() => navigate(`/doctor/consultation/${t.id}`)}
+                        className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold gap-1.5 h-8 px-3 shadow-sm"
+                      >
+                        <Stethoscope className="w-3.5 h-3.5" />
+                        <span>View Consultation</span>
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             );
           })}
         </div>
       )}
-
-      {/* ========================================================================= */}
-      {/* 🏷️ FULL PATIENT & TOKEN DETAILS MODAL DIALOG                              */}
-      {/* Opens when user clicks any token card                                     */}
-      {/* ========================================================================= */}
-      <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
-        <DialogContent className="max-w-lg p-0 overflow-hidden rounded-3xl border-2 border-stone-200 dark:border-stone-800 shadow-2xl">
-          {selectedToken && (
-            <div>
-              {/* Modal Header */}
-              <div className={cn(
-                "p-6 text-white relative",
-                (selectedToken.isEmergency || selectedToken.tokenNumber?.startsWith('EMG'))
-                  ? "bg-gradient-to-r from-red-600 via-rose-700 to-red-600"
-                  : "bg-gradient-to-r from-teal-700 via-teal-800 to-stone-900"
-              )}>
-                <div className="flex items-center justify-between">
-                  <span className="px-3 py-1 rounded-full bg-black/40 text-amber-300 font-mono font-black text-xs uppercase tracking-widest border border-white/20">
-                    {(selectedToken.isEmergency || selectedToken.tokenNumber?.startsWith('EMG')) ? "🚨 EMERGENCY CASE" : "OPD APPOINTMENT"}
-                  </span>
-                  <StatusBadge status={selectedToken.status} />
-                </div>
-
-                <div className="mt-4 flex items-center gap-4">
-                  <div className="min-w-[86px] h-[74px] rounded-2xl bg-white text-stone-900 flex flex-col items-center justify-center font-mono shadow-xl px-2 border-2 border-white/40">
-                    <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
-                      {(selectedToken.isEmergency || selectedToken.tokenNumber?.startsWith('EMG')) ? "EMG" : "TOKEN"}
-                    </span>
-                    <span className="text-3xl font-black text-stone-900 tracking-tight">
-                      {selectedToken.tokenNumber}
-                    </span>
-                  </div>
-
-                  <div>
-                    <h2 className="text-2xl font-black tracking-tight text-white">
-                      {selectedToken.patient?.fullName || 'Walk-in Patient'}
-                    </h2>
-                    <p className="text-xs text-stone-200 mt-0.5 flex items-center gap-2 font-mono">
-                      <span>UHID: {selectedToken.patient?.patientCode || '-'}</span>
-                      <span>•</span>
-                      <span>Queue Pos: #{selectedToken.queueNumber}</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Body: Full Details */}
-              <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-                {/* Patient Vitals & Demographics */}
-                <div className="p-4 rounded-2xl bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 space-y-2.5">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-teal-600" />
-                    Patient Information
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Age & Gender:</span>
-                      <strong className="text-foreground text-sm">{selectedToken.patient?.age || '-'} Years / {selectedToken.patient?.gender || '-'}</strong>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Blood Group:</span>
-                      <span className="px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 font-black text-xs inline-block">
-                        🩸 {selectedToken.patient?.bloodGroup || 'O+'}
-                      </span>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="text-muted-foreground block text-[11px]">Mobile Phone:</span>
-                      <strong className="text-foreground font-mono text-sm flex items-center gap-1.5">
-                        <Phone className="w-3.5 h-3.5 text-stone-400" />
-                        {selectedToken.patient?.mobile || 'No contact provided'}
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Doctor & Consultation Details */}
-                <div className="p-4 rounded-2xl bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 space-y-2.5">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Stethoscope className="w-3.5 h-3.5 text-teal-600" />
-                    Consultation & Cabin
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Doctor:</span>
-                      <strong className="text-foreground text-sm">
-                        Dr. {(selectedToken.doctor?.fullName || 'OPD').replace(/^Dr\.?\s*/i, '')}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Department:</span>
-                      <strong className="text-teal-700 dark:text-teal-400 text-sm">
-                        {selectedToken.department || selectedToken.doctor?.department || 'General OPD'}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Room / Cabin:</span>
-                      <strong className="text-foreground text-sm">{selectedToken.doctor?.room || 'Cabin 101'}</strong>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Scheduled Time:</span>
-                      <strong className="text-foreground font-mono text-sm">{selectedToken.appointmentTime}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Notes / Reason */}
-                {selectedToken.notes && (
-                  <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-xs">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-400 block mb-1">
-                      Reason / Clinical Notes:
-                    </span>
-                    <p className="text-amber-950 dark:text-amber-200 font-medium italic">
-                      "{selectedToken.notes}"
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Modal Footer Actions */}
-              <div className="p-5 border-t border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/50 flex flex-wrap items-center justify-between gap-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePrintSlip(selectedToken)}
-                  className="font-bold text-xs gap-1.5 h-10 px-4"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Print Slip</span>
-                </Button>
-
-                <div className="flex items-center gap-2">
-                  {!selectedToken.isEmergency && !selectedToken.tokenNumber?.startsWith('EMG') && (selectedToken.status === 'checked_in' || selectedToken.status === 'booked') && (
-                    <Button
-                      size="sm"
-                      onClick={() => handlePromoteToEmergency(selectedToken)}
-                      disabled={isBoosting}
-                      className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs gap-1.5 h-10 px-4 shadow-md"
-                    >
-                      <Zap className="w-4 h-4 fill-current" />
-                      <span>Promote to Emergency</span>
-                    </Button>
-                  )}
-
-                  {(selectedToken.status === 'in_consultation' || selectedToken.status === 'IN_CONSULTATION') && (
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setDetailModalOpen(false);
-                        navigate(`/doctor/consultation/${selectedToken.id}`);
-                      }}
-                      className="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs gap-1.5 h-10 px-4 shadow-md"
-                    >
-                      <Stethoscope className="w-4 h-4" />
-                      <span>Open Consultation</span>
-                    </Button>
-                  )}
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDetailModalOpen(false)}
-                    className="font-bold text-xs h-10 px-4"
-                  >
-                    Close
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
