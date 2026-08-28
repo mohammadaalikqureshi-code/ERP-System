@@ -42,17 +42,20 @@ class DoctorService:
     def _serialize_doctors(self, docs):
         response = []
         for d in docs:
-            full_name = d.user.full_name if d.user and d.user.full_name else (f"{d.user.first_name or ''} {d.user.last_name or ''}".strip() if d.user else "Doctor")
+            full_name = d.user.full_name if d.user and d.user.full_name else "Doctor"
+            parts = full_name.split()
+            first_name = parts[0] if len(parts) > 0 else "Doctor"
+            last_name = " ".join(parts[1:]) if len(parts) > 1 else ""
             user_data = None
             if d.user:
                 user_data = {
                     "id": d.user.id,
                     "email": d.user.email or "",
-                    "first_name": d.user.first_name or "",
-                    "last_name": d.user.last_name or "",
+                    "first_name": first_name,
+                    "last_name": last_name,
                     "full_name": full_name,
                     "fullName": full_name,
-                    "role": d.user.role or "doctor",
+                    "role": "doctor",
                 }
             response.append({
                 "id": str(d.id),
