@@ -205,6 +205,217 @@ const UpsideAutoSuggestInput: React.FC<UpsideAutoSuggestProps> = ({
   );
 };
 
+// =========================================================================
+// 🌟 MULTI-SPECIAL INSTRUCTION INPUT COMPONENT (Pick Many Instructions)
+// Allows selecting multiple clinical guidelines with live chips and upside catalog
+// =========================================================================
+interface MultiSpecialInstructionProps {
+  label: string;
+  sublabel?: string;
+  value: string;
+  onChange: (val: string) => void;
+  options: string[];
+  placeholder?: string;
+}
+
+const MultiSpecialInstructionInput: React.FC<MultiSpecialInstructionProps> = ({
+  label,
+  sublabel,
+  value,
+  onChange,
+  options,
+  placeholder = "Type or select multiple instructions...",
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [customInput, setCustomInput] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Parse existing instructions (support newlines or bullet points)
+  const activeInstructions = React.useMemo(() => {
+    if (!value || !value.trim()) return [];
+    return value
+      .split(/\n| • |• /)
+      .map((s) => s.replace(/^[•\-\*\s]+/, '').trim())
+      .filter(Boolean);
+  }, [value]);
+
+  const updateInstructionsList = (newItems: string[]) => {
+    const formatted = newItems.map((item) => `• ${item}`).join('\n');
+    onChange(formatted);
+  };
+
+  const addInstruction = (inst: string) => {
+    const cleaned = inst.replace(/^[•\-\*\s]+/, '').trim();
+    if (!cleaned) return;
+    if (!activeInstructions.includes(cleaned)) {
+      updateInstructionsList([...activeInstructions, cleaned]);
+    }
+    setCustomInput('');
+  };
+
+  const removeInstruction = (indexToRemove: number) => {
+    const updated = activeInstructions.filter((_, idx) => idx !== indexToRemove);
+    updateInstructionsList(updated);
+  };
+
+  const toggleInstruction = (inst: string) => {
+    const cleaned = inst.replace(/^[•\-\*\s]+/, '').trim();
+    if (activeInstructions.includes(cleaned)) {
+      updateInstructionsList(activeInstructions.filter((item) => item !== cleaned));
+    } else {
+      updateInstructionsList([...activeInstructions, cleaned]);
+    }
+  };
+
+  // Filter options based on custom typing
+  const filteredOptions = React.useMemo(() => {
+    const q = customInput.toLowerCase().trim();
+    if (!q) return options;
+    return options.filter((opt) => opt.toLowerCase().includes(q));
+  }, [customInput, options]);
+
+  // Click outside to close popup
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative space-y-2" ref={containerRef}>
+      <div className="flex items-center justify-between">
+        <Label className="text-[11px] font-bold text-stone-800 dark:text-stone-200">
+          {label}
+        </Label>
+        <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold">
+          {sublabel || '✨ Multi-Select Enabled (Pick Many)'}
+        </span>
+      </div>
+
+      {/* 🌟 UPSIDE FLOATING RESULTS POPUP (Positioned Above the Input Block) */}
+      {isOpen && (
+        <div className="absolute bottom-full mb-1.5 left-0 right-0 z-50 bg-white dark:bg-stone-900 border-2 border-teal-500/80 rounded-2xl shadow-[0_-10px_35px_rgba(0,0,0,0.25)] max-h-64 overflow-y-auto divide-y divide-stone-100 dark:divide-stone-800 animate-in fade-in slide-in-from-bottom-2">
+          {/* Header of Upside Popup */}
+          <div className="sticky top-0 bg-teal-50/95 dark:bg-stone-800/95 px-3 py-2 border-b border-teal-200 dark:border-stone-700 flex items-center justify-between backdrop-blur-sm z-10">
+            <span className="text-[10px] font-black uppercase tracking-wider text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              Special Instructions Catalog ({activeInstructions.length} Selected)
+            </span>
+            <span className="text-[9px] text-stone-500 font-medium">Click to Add/Remove Multiple ⚡</span>
+          </div>
+
+          {/* Results List with Checkboxes / Active Highlight */}
+          <div className="p-1 space-y-0.5">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((opt, idx) => {
+                const isSelected = activeInstructions.includes(opt.trim());
+                return (
+                  <div
+                    key={idx}
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // Keep input focused
+                      toggleInstruction(opt);
+                    }}
+                    className={`px-3 py-2 text-xs rounded-xl cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                      isSelected
+                        ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-900 dark:text-teal-200 font-bold border border-teal-300 dark:border-teal-700'
+                        : 'hover:bg-stone-100 dark:hover:bg-stone-800/80 text-stone-800 dark:text-stone-200 font-medium'
+                    }`}
+                  >
+                    <span className="flex-1 leading-snug">{opt}</span>
+                    {isSelected ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-teal-600 text-white font-bold flex items-center gap-1 shrink-0">
+                        <Check className="w-3 h-3" /> Added
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-stone-400 group-hover:text-teal-600 font-semibold shrink-0">
+                        + Add
+                      </span>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="p-4 text-center text-xs text-stone-500 italic">
+                No matching preset found. Press "Add" to include your custom instruction!
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Selected Instruction Badges / Pills */}
+      {activeInstructions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-teal-50/50 dark:bg-stone-800/40 border border-teal-200/60 dark:border-stone-700">
+          {activeInstructions.map((item, idx) => (
+            <span
+              key={idx}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-stone-900 border border-teal-300 dark:border-teal-700 text-teal-900 dark:text-teal-200 shadow-xs"
+            >
+              <span className="text-teal-600 font-bold">📌</span>
+              <span>{item}</span>
+              <button
+                type="button"
+                onClick={() => removeInstruction(idx)}
+                className="w-4 h-4 rounded-full flex items-center justify-center text-stone-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors ml-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Input Box for searching or typing custom instructions */}
+      <div className="flex gap-1.5">
+        <div className="relative flex-1">
+          <Input
+            value={customInput}
+            onChange={(e) => {
+              setCustomInput(e.target.value);
+              if (!isOpen) setIsOpen(true);
+            }}
+            onFocus={() => setIsOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (customInput.trim()) {
+                  addInstruction(customInput);
+                }
+              }
+            }}
+            placeholder={activeInstructions.length > 0 ? "Type or click to add another instruction..." : placeholder}
+            className="h-9 text-xs font-semibold bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700 pr-7 focus:border-teal-500"
+          />
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => setIsOpen(!isOpen)}
+            className="absolute right-2 top-2.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 cursor-pointer"
+          >
+            <ChevronDown className="w-4 h-4" />
+          </button>
+        </div>
+
+        {customInput.trim() && (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => addInstruction(customInput)}
+            className="h-9 px-3 text-xs bg-teal-600 hover:bg-teal-700 text-white font-bold cursor-pointer"
+          >
+            + Add
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const vitalsSchema = z.object({
   bloodPressure: z.string().optional(),
   heartRate: z.coerce.number().optional(),
@@ -835,7 +1046,7 @@ export default function ConsultationView() {
                             />
                           </div>
 
-                          {/* Row 3: Duration & Special Instructions (Upside Floating Suggestions) */}
+                          {/* Row 3: Duration & Special Instructions (Multi-Instruction Support) */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <UpsideAutoSuggestInput
                               label="4. Duration"
@@ -846,13 +1057,13 @@ export default function ConsultationView() {
                               placeholder="Type or pick duration (e.g. 5 Days, 1 Month, Weekly for 8 Weeks...)"
                             />
 
-                            <UpsideAutoSuggestInput
+                            <MultiSpecialInstructionInput
                               label="5. Special Instructions"
-                              sublabel="72+ Guidelines"
+                              sublabel="✨ Select Multiple Guidelines"
                               value={currentMed.instructions || ''}
                               onChange={(val) => prescriptionForm.setValue(`medicines.${index}.instructions`, val, { shouldDirty: true })}
                               options={UNIVERSAL_INSTRUCTIONS_OPTIONS}
-                              placeholder="Type or pick guidelines (e.g. Take after meals with plenty of water...)"
+                              placeholder="Type or pick multiple instructions..."
                             />
                           </div>
                         </div>
