@@ -416,3 +416,41 @@ class AppointmentService:
 
         return self._format_appointment(next_app)
 
+    async def complete_and_call_next(self, clinic_id: uuid.UUID, user_id: uuid.UUID, appointment_id: uuid.UUID, doctor_id: uuid.UUID = None):
+        """Atomically finishes the current consultation and automatically calls the next waiting patient."""
+        # 1. Complete current appointment
+        current_app = (await self.db.execute(
+            select(Appointment).where(Appointment.id == appointment_id, Appointment.clinic_id == clinic_id)
+        )).scalar_one_or_none()
+        
+        if not current_app:
+            raise NotFoundError("Appointment not found")
+
+        now = datetime.now(timezone.utc)
+        current_app.status = "completed"
+        current_app.completed_at = now
+        resolved_doctor_id = doctor_id or current_app.doctor_id
+        await self.db.commit()
+        await self.db.refresh(current_app)
+
+        # Broadcast completed status
+        await self._announce(clinic_id, Events.APPOINTMENT_STATUS_CHANGED, current_app.id, status="completed", tokenNumber=current_app.token_number)
+
+        # 2. Automatically find and call the next patient in queue
+        next_app = None
+        has_next = False
+        try:
+            next_app = await self.start_next_consultation(clinic_id, user_id, resolved_doctor_id)
+            has_next = True
+            msg = f"Consultation #{current_app.token_number} completed. Next Token #{next_app.get('tokenNumber')} called to room."
+        except NotFoundError:
+            has_next = False
+            msg = f"Consultation #{current_app.token_number} completed. No more waiting patients in queue for today."
+
+        return {
+            "completed_appointment_id": str(current_app.id),
+            "completed_token_number": current_app.token_number,
+            "has_next": has_next,
+            "next_appointment": next_app,
+            "message": msg
+        }

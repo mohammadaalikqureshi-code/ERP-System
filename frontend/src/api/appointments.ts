@@ -107,3 +107,20 @@ export const useStartNextConsultation = () => {
   });
 };
 
+export const useCompleteAndCallNext = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ appointmentId, doctorId }: { appointmentId: string; doctorId?: string }) => {
+      const params = doctorId ? { doctorId } : {};
+      const { data } = await apiClient.post<any>(`/appointments/${appointmentId}/complete-and-call-next`, {}, { params });
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['queue'] });
+      queryClient.invalidateQueries({ queryKey: ['doctorDashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['doctorTodayAppointments'] });
+      queryClient.invalidateQueries({ queryKey: ['public', 'queue'] });
+    },
+  });
+};

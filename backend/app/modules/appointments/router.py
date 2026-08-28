@@ -75,6 +75,16 @@ async def update_status(
 ):
     return await AppointmentService(db).update_status(clinic_id, id, data)
 
+@router.post("/{id}/complete-and-call-next", dependencies=[Depends(require_permission("appointments.update"))])
+async def complete_and_call_next_endpoint(
+    id: uuid.UUID,
+    doctorId: uuid.UUID = None,
+    db: AsyncSession = Depends(get_db),
+    clinic_id: uuid.UUID = Depends(get_clinic_scope),
+    current_user: User = Depends(get_current_active_user)
+):
+    return await AppointmentService(db).complete_and_call_next(clinic_id, current_user.id, id, doctorId)
+
 @router.patch("/{id}/reschedule", response_model=AppointmentResponse, dependencies=[Depends(require_permission("appointments.update"))])
 async def reschedule_appointment(
     id: uuid.UUID,
