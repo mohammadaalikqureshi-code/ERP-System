@@ -1121,7 +1121,7 @@ export default function ConsultationView() {
             <span>Save Rx</span>
           </Button>
 
-          {!isCompleted && (
+          {!isCompleted ? (
             <>
               <Button 
                 variant="outline"
@@ -1153,6 +1153,20 @@ export default function ConsultationView() {
                 )}
               </Button>
             </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-xs font-bold border border-emerald-300 flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Completed
+              </span>
+              <Button 
+                onClick={handleSignAndCallNext} 
+                disabled={isProcessingAction || completeAndCallNextMutation.isPending}
+                className="bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md gap-2 text-xs h-9 px-4 cursor-pointer"
+              >
+                <Sparkles className="h-4 w-4 text-amber-300" />
+                <span>🔔 Call Next Patient →</span>
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -1508,6 +1522,48 @@ export default function ConsultationView() {
                       {...prescriptionForm.register('notes')} 
                     />
                   </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-stone-200 dark:border-stone-800">
+                    <div className="text-xs text-stone-500">
+                      💡 Click <strong>Sign & Call Next</strong> to save prescription & vitals and summon the next patient.
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <Button 
+                        type="button"
+                        variant="outline" 
+                        size="sm" 
+                        onClick={prescriptionForm.handleSubmit(onSavePrescription)} 
+                        disabled={savePrescriptionMutation.isPending}
+                        className="text-xs font-bold gap-1.5 h-9"
+                      >
+                        <Save className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Save Rx Draft</span>
+                      </Button>
+
+                      {!isCompleted && (
+                        <Button 
+                          type="button"
+                          variant="outline" 
+                          size="sm" 
+                          onClick={completeConsultation} 
+                          disabled={updateStatusMutation.isPending || isProcessingAction}
+                          className="text-xs font-semibold h-9"
+                        >
+                          Complete Only
+                        </Button>
+                      )}
+
+                      <Button 
+                        type="button"
+                        onClick={handleSignAndCallNext} 
+                        disabled={isProcessingAction || completeAndCallNextMutation.isPending}
+                        className="bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-lg gap-2 text-xs h-9 px-4 cursor-pointer"
+                      >
+                        <Sparkles className="h-4 w-4 text-amber-300" />
+                        <span>{isCompleted ? "🔔 Call Next Patient →" : "⚡ Sign & Call Next →"}</span>
+                      </Button>
+                    </div>
+                  </div>
                 </form>
               )}
             </CardContent>
@@ -1667,17 +1723,17 @@ export default function ConsultationView() {
       )}
 
       {/* Floating Bottom Quick-Action Bar */}
-      {!isCompleted && (
-        <div className="fixed bottom-4 inset-x-0 z-40 max-w-2xl mx-auto px-4">
-          <div className="flex items-center justify-between p-3 rounded-2xl bg-stone-900/95 text-white backdrop-blur shadow-2xl border border-stone-800">
-            <div className="flex items-center gap-2 pl-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-pulse" />
-              <span className="text-xs font-semibold text-stone-300">
-                Active Token <strong className="text-teal-400 font-mono font-bold text-sm">#{appointment.tokenNumber}</strong> ({patientFullName})
-              </span>
-            </div>
+      <div className="fixed bottom-4 inset-x-0 z-40 max-w-2xl mx-auto px-4">
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-stone-900/95 text-white backdrop-blur shadow-2xl border border-stone-800">
+          <div className="flex items-center gap-2 pl-2">
+            <span className={cn("w-2.5 h-2.5 rounded-full", isCompleted ? "bg-emerald-400" : "bg-teal-400 animate-pulse")} />
+            <span className="text-xs font-semibold text-stone-300">
+              Token <strong className="text-teal-400 font-mono font-bold text-sm">#{appointment.tokenNumber}</strong> ({patientFullName}) {isCompleted && <span className="text-emerald-400 font-bold ml-1">• Completed</span>}
+            </span>
+          </div>
 
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            {!isCompleted && (
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -1687,29 +1743,28 @@ export default function ConsultationView() {
               >
                 Complete Only
               </Button>
+            )}
 
-              <Button 
-                onClick={handleSignAndCallNext} 
-                disabled={isProcessingAction || completeAndCallNextMutation.isPending}
-                className="bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs gap-2 h-9 px-4 shadow-lg cursor-pointer"
-              >
-                {isProcessingAction ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Executing...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                    <span>⚡ Sign & Call Next</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </>
-                )}
-              </Button>
-            </div>
+            <Button 
+              onClick={handleSignAndCallNext} 
+              disabled={isProcessingAction || completeAndCallNextMutation.isPending}
+              className="bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs gap-2 h-9 px-4 shadow-lg cursor-pointer"
+            >
+              {isProcessingAction ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Executing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>{isCompleted ? "🔔 Call Next Patient →" : "⚡ Sign & Call Next →"}</span>
+                </>
+              )}
+            </Button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
