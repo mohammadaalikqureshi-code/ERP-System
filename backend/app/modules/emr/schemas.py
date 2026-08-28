@@ -50,7 +50,8 @@ class PrescriptionItemBase(BaseModel):
     medicine_name: str
     dosage: str
     frequency: str
-    duration_days: str
+    duration_days: Optional[str] = "5 Days"
+    duration: Optional[str] = "5 Days"
     instructions: Optional[str] = None
 
 class PrescriptionItemCreate(PrescriptionItemBase):
@@ -70,9 +71,10 @@ class PrescriptionBase(BaseModel):
 
 class PrescriptionCreate(PrescriptionBase):
     appointment_id: UUID4
-    patient_id: UUID4
-    doctor_id: UUID4
-    items: List[PrescriptionItemCreate]
+    patient_id: Optional[UUID4] = None
+    doctor_id: Optional[UUID4] = None
+    items: Optional[List[PrescriptionItemCreate]] = []
+    medicines: Optional[List[PrescriptionItemCreate]] = []
 
 class PrescriptionResponse(PrescriptionBase):
     id: UUID4

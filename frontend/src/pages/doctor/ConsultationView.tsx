@@ -899,15 +899,27 @@ export default function ConsultationView() {
 
   const onSavePrescription = async (data: PrescriptionFormValues) => {
     try {
+      const validMeds = (data.medicines || []).filter(m => m.medicineName?.trim());
+      const formattedItems = validMeds.map(m => ({
+        medicine_name: m.medicineName,
+        dosage: m.dosage,
+        frequency: m.frequency,
+        duration_days: m.duration,
+        duration: m.duration,
+        instructions: m.instructions
+      }));
+
       await savePrescriptionMutation.mutateAsync({
         appointmentId: appointmentId!,
-        patientId: appointment!.patientId,
-        doctorId: appointment!.doctorId,
-        ...data,
+        patientId: appointment?.patientId || (appointment as any)?.patient_id,
+        doctorId: appointment?.doctorId || (appointment as any)?.doctor_id,
+        notes: data.notes,
+        medicines: formattedItems as any,
+        items: formattedItems as any,
       });
       toast({ title: 'Prescription saved successfully', variant: 'success' });
-    } catch {
-      toast({ title: 'Failed to save prescription', variant: 'destructive' });
+    } catch (err: any) {
+      toast({ title: 'Failed to save prescription', description: err.response?.data?.message || err.message, variant: 'destructive' });
     }
   };
 
@@ -917,12 +929,22 @@ export default function ConsultationView() {
       const rxValues = prescriptionForm.getValues();
       const validMeds = (rxValues.medicines || []).filter(m => m.medicineName?.trim());
       if (validMeds.length > 0 || rxValues.notes?.trim()) {
+        const formattedItems = validMeds.map(m => ({
+          medicine_name: m.medicineName,
+          dosage: m.dosage,
+          frequency: m.frequency,
+          duration_days: m.duration,
+          duration: m.duration,
+          instructions: m.instructions
+        }));
+
         await savePrescriptionMutation.mutateAsync({
           appointmentId: appointmentId!,
-          patientId: appointment!.patientId,
-          doctorId: appointment!.doctorId,
+          patientId: appointment?.patientId || (appointment as any)?.patient_id,
+          doctorId: appointment?.doctorId || (appointment as any)?.doctor_id,
           notes: rxValues.notes,
-          medicines: validMeds,
+          medicines: formattedItems as any,
+          items: formattedItems as any,
         });
       }
 
@@ -932,7 +954,7 @@ export default function ConsultationView() {
         const bmi = heightM > 0 && vitalsValues.weight ? parseFloat((vitalsValues.weight / (heightM * heightM)).toFixed(2)) : 0;
         await saveVitalsMutation.mutateAsync({
           appointmentId: appointmentId!,
-          patientId: appointment!.patientId,
+          patientId: appointment?.patientId || (appointment as any)?.patient_id,
           ...vitalsValues,
           bmi,
         });
@@ -940,7 +962,7 @@ export default function ConsultationView() {
 
       const result: any = await completeAndCallNextMutation.mutateAsync({
         appointmentId: appointmentId!,
-        doctorId: appointment?.doctorId,
+        doctorId: appointment?.doctorId || (appointment as any)?.doctor_id,
       });
 
       if (result.hasNext && result.nextAppointment) {

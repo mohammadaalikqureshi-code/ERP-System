@@ -67,16 +67,74 @@ class EMRService:
 
     @staticmethod
     async def create_prescription(db: AsyncSession, pres_data: PrescriptionCreate) -> Prescription:
-        pres_dict = pres_data.model_dump(exclude={"items"})
-        db_prescription = Prescription(**pres_dict)
-        db.add(db_prescription)
-        await db.flush() # to get db_prescription.id
-        
-        for item_data in pres_data.items:
-            db_item = PrescriptionItem(**item_data.model_dump(), prescription_id=db_prescription.id)
-            db.add(db_item)
+        from app.models.appointment import Appointment
+        from sqlalchemy import delete
+
+        # Resolve patient_id and doctor_id from appointment if missing
+        patient_id = pres_data.patient_id
+        doctor_id = pres_data.doctor_id
+        if not patient_id or not doctor_id:
+            apt_stmt = select(Appointment).where(Appointment.id == pres_data.appointment_id)
+            apt_row = (await db.execute(apt_stmt)).scalar_one_or_none()
+            if apt_row:
+                patient_id = patient_id or apt_row.patient_id
+                doctor_id = doctor_id or apt_row.doctor_id
+
+        # Determine prescription items list (support both items and medicines keys)
+        raw_items = pres_data.items if (pres_data.items and len(pres_data.items) > 0) else (pres_data.medicines or [])
+
+        # Check if a prescription already exists for this appointment
+        existing_pres = (await db.execute(
+            select(Prescription).where(Prescription.appointment_id == pres_data.appointment_id)
+        )).scalars().first()
+
+        if existing_pres:
+            existing_pres.notes = pres_data.notes
+            if patient_id:
+                existing_pres.patient_id = patient_id
+            if doctor_id:
+                existing_pres.doctor_id = doctor_id
             
-        await db.commit()
+            # Delete old items to overwrite cleanly
+            await db.execute(delete(PrescriptionItem).where(PrescriptionItem.prescription_id == existing_pres.id))
+            
+            for item in raw_items:
+                dur = item.duration_days or item.duration or "5 Days"
+                db_item = PrescriptionItem(
+                    prescription_id=existing_pres.id,
+                    medicine_name=item.medicine_name,
+                    dosage=item.dosage,
+                    frequency=item.frequency,
+                    duration_days=dur,
+                    instructions=item.instructions
+                )
+                db.add(db_item)
+            
+            await db.commit()
+            db_prescription = existing_pres
+        else:
+            db_prescription = Prescription(
+                appointment_id=pres_data.appointment_id,
+                patient_id=patient_id,
+                doctor_id=doctor_id,
+                notes=pres_data.notes
+            )
+            db.add(db_prescription)
+            await db.flush()
+            
+            for item in raw_items:
+                dur = item.duration_days or item.duration or "5 Days"
+                db_item = PrescriptionItem(
+                    prescription_id=db_prescription.id,
+                    medicine_name=item.medicine_name,
+                    dosage=item.dosage,
+                    frequency=item.frequency,
+                    duration_days=dur,
+                    instructions=item.instructions
+                )
+                db.add(db_item)
+                
+            await db.commit()
         
         # reload to get items
         result = await db.execute(
