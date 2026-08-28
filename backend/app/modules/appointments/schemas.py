@@ -90,3 +90,16 @@ class QueueResponse(BaseModel):
     waiting: List[dict] = []
     completed: List[dict] = []
     skipped: List[dict] = []
+
+
+class QuickWalkinCreate(BaseModel):
+    mobile: str
+    full_name: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = "male"
+    blood_group: Optional[str] = "O+"
+    doctor_id: uuid.UUID
+    department: Optional[str] = None
+    visit_type: str = "new"
+    is_emergency: bool = False
+    notes: Optional[str] = None

@@ -3,6 +3,7 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
 from app.models.appointment import Appointment
 from app.models.doctor import Doctor
+from app.models.patient import Patient
 from app.modules.appointments.schemas import AppointmentCreate, AppointmentUpdate, StatusUpdate, RescheduleRequest
 from app.modules.doctors.service import DoctorService
 from app.core.exceptions import NotFoundError, ValidationError
@@ -453,4 +454,141 @@ class AppointmentService:
             "has_next": has_next,
             "next_appointment": next_app,
             "message": msg
+        }
+
+    async def create_quick_walkin(self, clinic_id: uuid.UUID, user_id: uuid.UUID, data: any):
+        """Express 10-Second Quick Walk-in Token Generator for Receptionists."""
+        today = datetime.now(timezone.utc).date()
+        clean_mobile = data.mobile.strip().replace(" ", "").replace("-", "")
+
+        # 1. Lookup or create patient
+        patient = (await self.db.execute(
+            select(Patient).where(Patient.clinic_id == clinic_id, Patient.mobile == clean_mobile)
+        )).scalar_one_or_none()
+
+        is_new_patient = False
+        if not patient:
+            is_new_patient = True
+            count_patients = (await self.db.execute(
+                select(func.count(Patient.id)).where(Patient.clinic_id == clinic_id)
+            )).scalar() or 0
+            code = f"PT-{count_patients + 10001}"
+            patient = Patient(
+                clinic_id=clinic_id,
+                patient_code=code,
+                full_name=data.full_name or "Walk-in Patient",
+                mobile=clean_mobile,
+                age=data.age or 30,
+                gender=data.gender or "male",
+                blood_group=data.blood_group or "O+"
+            )
+            self.db.add(patient)
+            await self.db.commit()
+            await self.db.refresh(patient)
+        elif data.full_name and patient.full_name != data.full_name:
+            patient.full_name = data.full_name
+            if data.age: patient.age = data.age
+            if data.gender: patient.gender = data.gender
+            if data.blood_group: patient.blood_group = data.blood_group
+            await self.db.commit()
+            await self.db.refresh(patient)
+
+        # 2. Get Doctor details
+        doctor = (await self.db.execute(
+            select(Doctor).options(selectinload(Doctor.user)).where(Doctor.id == data.doctor_id)
+        )).scalar_one_or_none()
+        if not doctor:
+            raise NotFoundError("Doctor not found")
+
+        dept = data.department or doctor.department or "General OPD"
+
+        # 3. Calculate queue & generate token
+        queue_num = await self._generate_queue_number(doctor.id, str(today))
+        token_prefix = "EMG" if data.is_emergency else "A"
+        token_number = f"{token_prefix}-{queue_num:03d}"
+        now = datetime.now(timezone.utc)
+
+        appointment = Appointment(
+            clinic_id=clinic_id,
+            patient_id=patient.id,
+            doctor_id=doctor.id,
+            department=dept,
+            visit_type="emergency" if data.is_emergency else data.visit_type,
+            appointment_date=today,
+            appointment_time=now.time(),
+            token_number=token_number,
+            queue_number=queue_num,
+            status="checked_in",
+            booked_by=user_id,
+            checked_in_at=now,
+            notes=data.notes
+        )
+        self.db.add(appointment)
+        await self.db.commit()
+        await self.db.refresh(appointment)
+
+        # 4. Calculate estimated wait time (patients ahead)
+        patients_ahead_count = (await self.db.execute(
+            select(func.count(Appointment.id)).where(
+                Appointment.clinic_id == clinic_id,
+                Appointment.doctor_id == doctor.id,
+                Appointment.appointment_date == today,
+                Appointment.queue_number < queue_num,
+                Appointment.status.in_(["checked_in", "in_consultation"])
+            )
+        )).scalar() or 0
+
+        avg_mins = doctor.avg_consultation_minutes or 12
+        est_wait_mins = patients_ahead_count * avg_mins
+
+        # 5. Broadcast to waiting room TV display and staff
+        await self._announce(clinic_id, Events.APPOINTMENT_CREATED, appointment.id, token_number=appointment.token_number)
+        await self._announce(clinic_id, Events.APPOINTMENT_STATUS_CHANGED, appointment.id, status="checked_in", tokenNumber=appointment.token_number)
+
+        try:
+            from app.modules.notifications.service import NotificationService
+            doc_name = f"Dr. {doctor.user.full_name}" if doctor.user else "Doctor"
+            await NotificationService(self.db).create_and_broadcast(
+                clinic_id=clinic_id,
+                title="New Patient Arrived",
+                message=f"Walk-in Token #{token_number} ({patient.full_name}) registered for {doc_name} ({dept}).",
+                category="queue",
+                target_role="doctor",
+                sender_name="Front Desk Reception",
+                link="/doctor",
+            )
+        except Exception:
+            logger.warning("Failed to broadcast quick walkin notification", exc_info=True)
+
+        return {
+            "id": str(appointment.id),
+            "token_number": appointment.token_number,
+            "queue_number": appointment.queue_number,
+            "status": appointment.status,
+            "appointment_date": str(appointment.appointment_date),
+            "appointment_time": str(appointment.appointment_time)[:5],
+            "patient": {
+                "id": str(patient.id),
+                "patient_code": patient.patient_code,
+                "full_name": patient.full_name,
+                "mobile": patient.mobile,
+                "age": patient.age,
+                "gender": patient.gender,
+                "blood_group": patient.blood_group,
+                "is_new": is_new_patient
+            },
+            "doctor": {
+                "id": str(doctor.id),
+                "full_name": doctor.user.full_name if doctor.user else "Doctor",
+                "department": doctor.department,
+                "specialization": doctor.specialization,
+                "consultation_fee": float(doctor.consultation_fee) if doctor.consultation_fee else 500.0,
+                "room": "Room 101"
+            },
+            "queue_stats": {
+                "patients_ahead": patients_ahead_count,
+                "estimated_wait_minutes": est_wait_mins,
+                "estimated_wait_formatted": f"~{est_wait_mins} mins ({patients_ahead_count} ahead)" if patients_ahead_count > 0 else "Next in line! (0 mins)"
+            },
+            "message": f"Token #{token_number} generated successfully for {patient.full_name}."
         }

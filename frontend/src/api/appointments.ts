@@ -37,6 +37,23 @@ export const useCreateAppointment = () => {
   });
 };
 
+export const useQuickWalkinAppointment = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: any) => {
+      const { data } = await apiClient.post<any>('/appointments/quick-walkin', payload);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['queue'] });
+      queryClient.invalidateQueries({ queryKey: ['doctorDashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['doctorTodayAppointments'] });
+      queryClient.invalidateQueries({ queryKey: ['public', 'queue'] });
+    },
+  });
+};
+
 export const useUpdateAppointmentStatus = () => {
   const queryClient = useQueryClient();
   return useMutation({

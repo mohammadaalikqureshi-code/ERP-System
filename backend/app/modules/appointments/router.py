@@ -9,11 +9,20 @@ from app.middleware.clinic_scope import get_clinic_scope
 from app.models.user import User
 from app.modules.appointments.schemas import (
     AppointmentCreate, AppointmentUpdate, AppointmentResponse, 
-    StatusUpdate, RescheduleRequest, QueueResponse
+    StatusUpdate, RescheduleRequest, QueueResponse, QuickWalkinCreate
 )
 from app.modules.appointments.service import AppointmentService
 
 router = APIRouter(prefix="/appointments", tags=["Appointments"])
+
+@router.post("/quick-walkin", dependencies=[Depends(require_permission("appointments.create"))])
+async def create_quick_walkin_endpoint(
+    data: QuickWalkinCreate,
+    db: AsyncSession = Depends(get_db),
+    clinic_id: uuid.UUID = Depends(get_clinic_scope),
+    current_user: User = Depends(get_current_active_user)
+):
+    return await AppointmentService(db).create_quick_walkin(clinic_id, current_user.id, data)
 
 @router.post("", response_model=AppointmentResponse, dependencies=[Depends(require_permission("appointments.create"))])
 async def create_appointment(
