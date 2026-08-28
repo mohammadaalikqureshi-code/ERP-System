@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { cn } from '@/lib/utils';
 import { 
   UNIVERSAL_DRUG_DATABASE, 
   UNIVERSAL_FREQUENCY_OPTIONS, 
