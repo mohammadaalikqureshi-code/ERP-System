@@ -109,11 +109,19 @@ const AppointmentBookingContent = () => {
       });
 
       setGeneratedSlip(res);
-      toast({
-        title: `🎟️ Token #${res.tokenNumber} Generated!`,
-        description: `Added to Dr. ${res.doctor.fullName}'s live queue (${res.queueStats.estimatedWaitFormatted}).`,
-        variant: "success",
-      });
+      if (res.isDuplicatePrevented || res.is_duplicate_prevented) {
+        toast({
+          title: `⚠️ Active Token #${res.tokenNumber || res.token_number} Already Exists!`,
+          description: `Patient already in queue for Dr. ${res.doctor?.fullName || 'Doctor'} today. Duplicate token creation blocked.`,
+          variant: "warning",
+        });
+      } else {
+        toast({
+          title: `🎟️ Token #${res.tokenNumber || res.token_number} Generated!`,
+          description: `Added to Dr. ${res.doctor?.fullName || 'Doctor'}'s live queue (${res.queueStats?.estimatedWaitFormatted || ''}).`,
+          variant: "success",
+        });
+      }
     } catch (err: any) {
       toast({
         title: "Token Generation Failed",
@@ -372,6 +380,12 @@ const AppointmentBookingContent = () => {
                 <div className="bg-teal-600 p-4 text-white text-center space-y-1">
                   <div className="text-xs uppercase tracking-widest font-bold opacity-90">Sanjeevani Multi-Specialty Hospital</div>
                   <div className="text-sm font-semibold">OPD Patient Token Receipt</div>
+                  {(generatedSlip.isDuplicatePrevented || generatedSlip.is_duplicate_prevented) && (
+                    <div className="mt-2 py-1 px-2.5 rounded-lg bg-amber-400 text-stone-950 font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Patient Already Holds Active Token (Duplicate Creation Blocked)
+                    </div>
+                  )}
                 </div>
 
                 <CardContent className="p-6 text-center space-y-4">

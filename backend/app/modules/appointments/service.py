@@ -45,6 +45,21 @@ class AppointmentService:
         if not any(s["start_time"] == data.appointment_time for s in slots):
             raise ValidationError("That slot is no longer available. Please pick another time.")
 
+        # STRICT GUARD: Check if patient already has an active appointment with this doctor on this date
+        existing_apt = (await self.db.execute(
+            select(Appointment).where(
+                Appointment.clinic_id == clinic_id,
+                Appointment.patient_id == data.patient_id,
+                Appointment.doctor_id == data.doctor_id,
+                Appointment.appointment_date == data.appointment_date,
+                Appointment.status.in_(["booked", "checked_in", "in_consultation"])
+            )
+        )).scalar_one_or_none()
+        if existing_apt:
+            raise ValidationError(
+                f"Patient already has an active Token #{existing_apt.token_number} with this doctor today (Status: {existing_apt.status.replace('_', ' ').title()}). Cannot generate a duplicate token."
+            )
+
         values = data.model_dump()
         if not values.get("department"):
             doctor = (
@@ -464,10 +479,26 @@ class AppointmentService:
         today = datetime.now(timezone.utc).date()
         clean_mobile = data.mobile.strip().replace(" ", "").replace("-", "")
 
-        # 1. Lookup or create patient
-        patient = (await self.db.execute(
-            select(Patient).where(Patient.clinic_id == clinic_id, Patient.mobile == clean_mobile)
-        )).scalar_one_or_none()
+        # 1. Lookup or create patient (Recognizing Name, Mobile, Age, Blood Group)
+        patient = None
+        if clean_mobile:
+            patient = (await self.db.execute(
+                select(Patient).where(Patient.clinic_id == clinic_id, Patient.mobile == clean_mobile)
+            )).scalar_one_or_none()
+
+        # If not found by mobile, lookup by exact Name, Age, and Blood Group in this clinic
+        if not patient and data.full_name:
+            clean_name = data.full_name.strip()
+            name_query = select(Patient).where(
+                Patient.clinic_id == clinic_id,
+                func.lower(Patient.full_name) == clean_name.lower()
+            )
+            if data.age:
+                name_query = name_query.where(Patient.age == data.age)
+            if data.blood_group:
+                name_query = name_query.where(Patient.blood_group == data.blood_group)
+            
+            patient = (await self.db.execute(name_query)).scalar_one_or_none()
 
         is_new_patient = False
         if not patient:
@@ -488,13 +519,27 @@ class AppointmentService:
             self.db.add(patient)
             await self.db.commit()
             await self.db.refresh(patient)
-        elif data.full_name and patient.full_name != data.full_name:
-            patient.full_name = data.full_name
-            if data.age: patient.age = data.age
-            if data.gender: patient.gender = data.gender
-            if data.blood_group: patient.blood_group = data.blood_group
-            await self.db.commit()
-            await self.db.refresh(patient)
+        else:
+            # Keep patient record synchronized with verified demographics
+            updated = False
+            if data.full_name and patient.full_name != data.full_name:
+                patient.full_name = data.full_name
+                updated = True
+            if data.age and patient.age != data.age:
+                patient.age = data.age
+                updated = True
+            if data.gender and patient.gender != data.gender:
+                patient.gender = data.gender
+                updated = True
+            if data.blood_group and patient.blood_group != data.blood_group:
+                patient.blood_group = data.blood_group
+                updated = True
+            if clean_mobile and patient.mobile != clean_mobile:
+                patient.mobile = clean_mobile
+                updated = True
+            if updated:
+                await self.db.commit()
+                await self.db.refresh(patient)
 
         # 2. Get Doctor details
         doctor = (await self.db.execute(
@@ -504,8 +549,68 @@ class AppointmentService:
             raise NotFoundError("Doctor not found")
 
         dept = data.department or doctor.department or "General OPD"
+        doc_full_name = doctor.user.full_name if doctor.user else "Doctor"
 
-        # 3. Calculate queue & generate token
+        # 3. 🚨 STRICT GUARD: Check if patient ALREADY has an active token for this doctor today
+        existing_apt = (await self.db.execute(
+            select(Appointment).where(
+                Appointment.clinic_id == clinic_id,
+                Appointment.patient_id == patient.id,
+                Appointment.doctor_id == doctor.id,
+                Appointment.appointment_date == today,
+                Appointment.status.in_(["checked_in", "in_consultation", "booked"])
+            ).order_by(Appointment.queue_number)
+        )).scalar_one_or_none()
+
+        if existing_apt:
+            # Calculate wait time for the existing active token
+            patients_ahead_count = (await self.db.execute(
+                select(func.count(Appointment.id)).where(
+                    Appointment.clinic_id == clinic_id,
+                    Appointment.doctor_id == doctor.id,
+                    Appointment.appointment_date == today,
+                    Appointment.queue_number < existing_apt.queue_number,
+                    Appointment.status.in_(["checked_in", "in_consultation"])
+                )
+            )).scalar() or 0
+            avg_mins = doctor.avg_consultation_minutes or 12
+            est_wait_mins = patients_ahead_count * avg_mins
+
+            return {
+                "id": str(existing_apt.id),
+                "token_number": existing_apt.token_number,
+                "queue_number": existing_apt.queue_number,
+                "status": existing_apt.status,
+                "appointment_date": str(existing_apt.appointment_date),
+                "appointment_time": str(existing_apt.appointment_time)[:5],
+                "is_duplicate_prevented": True,
+                "patient": {
+                    "id": str(patient.id),
+                    "patient_code": patient.patient_code,
+                    "full_name": patient.full_name,
+                    "mobile": patient.mobile,
+                    "age": patient.age,
+                    "gender": patient.gender,
+                    "blood_group": patient.blood_group,
+                    "is_new": False
+                },
+                "doctor": {
+                    "id": str(doctor.id),
+                    "full_name": doc_full_name,
+                    "department": doctor.department,
+                    "specialization": doctor.specialization,
+                    "consultation_fee": float(doctor.consultation_fee) if doctor.consultation_fee else 500.0,
+                    "room": "Room 101"
+                },
+                "queue_stats": {
+                    "patients_ahead": patients_ahead_count,
+                    "estimated_wait_minutes": est_wait_mins,
+                    "estimated_wait_formatted": f"~{est_wait_mins} mins ({patients_ahead_count} ahead)" if patients_ahead_count > 0 else "Next in line! (0 mins)"
+                },
+                "message": f"Active Token #{existing_apt.token_number} already exists today for {patient.full_name} with Dr. {doc_full_name} (Status: {existing_apt.status.replace('_', ' ').title()}). Duplicate generation blocked."
+            }
+
+        # 4. Calculate queue & generate new token
         queue_num = await self._generate_queue_number(doctor.id, today)
         token_prefix = "EMG" if data.is_emergency else "A"
         token_number = f"{token_prefix}-{queue_num:03d}"
