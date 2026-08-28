@@ -26,6 +26,15 @@ class AppointmentBase(BaseModel):
     appointment_time: time
     notes: Optional[str] = None
 
+    @field_validator("appointment_time", mode="before")
+    @classmethod
+    def parse_time(cls, v):
+        if isinstance(v, str):
+            parts = v.strip().split(":")
+            if len(parts) >= 2:
+                return time(int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0)
+        return v
+
     @field_validator("visit_type", mode="before")
     @classmethod
     def normalise_visit_type(cls, value):

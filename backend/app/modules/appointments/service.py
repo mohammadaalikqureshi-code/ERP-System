@@ -90,7 +90,15 @@ class AppointmentService:
                 "Could not allocate a token just now — too many bookings at once. Please try again."
             ) from last_error
 
-        await self.db.refresh(appointment)
+        stmt_load = (
+            select(Appointment)
+            .options(
+                selectinload(Appointment.patient),
+                selectinload(Appointment.doctor).selectinload(Doctor.user),
+            )
+            .where(Appointment.id == appointment.id)
+        )
+        appointment = (await self.db.execute(stmt_load)).scalar_one()
 
         send_notification_task.delay(
             str(appointment.patient_id),
@@ -581,8 +589,8 @@ class AppointmentService:
                 Appointment.doctor_id == doctor.id,
                 Appointment.appointment_date == today,
                 Appointment.status.in_(["checked_in", "in_consultation", "booked"])
-            ).order_by(Appointment.queue_number)
-        )).scalar_one_or_none()
+            ).order_by(Appointment.queue_number.desc()).limit(1)
+        )).scalars().first()
 
         # IF IT IS EMERGENCY: Allow generating or upgrading token to EMERGENCY priority
         if data.is_emergency:
