@@ -22,7 +22,10 @@ class AppointmentService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def _generate_queue_number(self, doctor_id: uuid.UUID, target_date: str) -> int:
+    async def _generate_queue_number(self, doctor_id: uuid.UUID, target_date: any) -> int:
+        if isinstance(target_date, str):
+            from datetime import date as d_cls
+            target_date = d_cls.fromisoformat(target_date)
         stmt = select(func.max(Appointment.queue_number)).where(
             Appointment.doctor_id == doctor_id,
             Appointment.appointment_date == target_date
@@ -503,7 +506,7 @@ class AppointmentService:
         dept = data.department or doctor.department or "General OPD"
 
         # 3. Calculate queue & generate token
-        queue_num = await self._generate_queue_number(doctor.id, str(today))
+        queue_num = await self._generate_queue_number(doctor.id, today)
         token_prefix = "EMG" if data.is_emergency else "A"
         token_number = f"{token_prefix}-{queue_num:03d}"
         now = datetime.now(timezone.utc)
