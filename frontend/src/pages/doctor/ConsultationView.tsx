@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,7 +14,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { 
   FileText, CheckCircle, Plus, Trash2, Loader2, Save, Sparkles, 
   ArrowRight, Activity, HeartPulse, User, Pill, Stethoscope, 
-  Phone, AlertTriangle, ShieldCheck, Clock, Check
+  Phone, AlertTriangle, ShieldCheck, Clock, Check, Search, ChevronDown, ListPlus
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -23,7 +23,8 @@ import {
   UNIVERSAL_FREQUENCY_OPTIONS, 
   UNIVERSAL_DOSAGE_OPTIONS, 
   UNIVERSAL_DURATION_OPTIONS, 
-  UNIVERSAL_INSTRUCTIONS_OPTIONS 
+  UNIVERSAL_INSTRUCTIONS_OPTIONS,
+  DrugInfo
 } from '@/data/drugDatabase';
 
 const vitalsSchema = z.object({
@@ -69,6 +70,8 @@ export default function ConsultationView() {
   const completeAndCallNextMutation = useCompleteAndCallNext();
 
   const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [activeDrugModalIndex, setActiveDrugModalIndex] = useState<number | null>(null);
+  const [drugSearchQuery, setDrugSearchQuery] = useState('');
 
   const vitalsForm = useForm<VitalsFormValues>({
     resolver: zodResolver(vitalsSchema),
@@ -87,7 +90,15 @@ export default function ConsultationView() {
     resolver: zodResolver(prescriptionSchema),
     defaultValues: {
       notes: '',
-      medicines: [{ medicineName: '', dosage: '', frequency: '', duration: '', instructions: '' }],
+      medicines: [
+        { 
+          medicineName: '', 
+          dosage: '500 mg', 
+          frequency: '1-0-1 (Twice daily after meals - Morning & Night)', 
+          duration: '5 Days (Standard Antibiotic / Anti-inflammatory Course)', 
+          instructions: 'Take after meals with plenty of water.' 
+        }
+      ],
     },
   });
 
@@ -105,31 +116,35 @@ export default function ConsultationView() {
   useEffect(() => {
     if (prescriptionData) {
       prescriptionForm.reset({
-        notes: prescriptionData.notes,
+        notes: prescriptionData.notes || '',
         medicines: prescriptionData.medicines?.length > 0 
           ? prescriptionData.medicines 
-          : [{ medicineName: '', dosage: '', frequency: '', duration: '', instructions: '' }],
+          : [
+              { 
+                medicineName: '', 
+                dosage: '500 mg', 
+                frequency: '1-0-1 (Twice daily after meals - Morning & Night)', 
+                duration: '5 Days (Standard Antibiotic / Anti-inflammatory Course)', 
+                instructions: 'Take after meals with plenty of water.' 
+              }
+            ],
       });
     }
   }, [prescriptionData, prescriptionForm]);
 
-  // Drug Autocomplete handler: Auto-populates dosage, frequency, duration, and instructions
-  const handleDrugNameChange = (index: number, value: string) => {
-    prescriptionForm.setValue(`medicines.${index}.medicineName`, value);
-    
-    // Check if entered or chosen value matches any item in the universal catalog
-    const matched = UNIVERSAL_DRUG_DATABASE.find(
-      (d) => d.name.toLowerCase() === value.toLowerCase() ||
-             d.generic.toLowerCase() === value.toLowerCase() ||
-             d.name.toLowerCase().startsWith(value.toLowerCase())
-    );
-
-    if (matched) {
-      prescriptionForm.setValue(`medicines.${index}.dosage`, matched.defaultDosage);
-      prescriptionForm.setValue(`medicines.${index}.frequency`, matched.defaultFrequency);
-      prescriptionForm.setValue(`medicines.${index}.duration`, matched.defaultDuration);
-      prescriptionForm.setValue(`medicines.${index}.instructions`, matched.defaultInstructions);
-    }
+  // Drug selection from Universal Catalog
+  const applyDrugToRow = (index: number, drug: DrugInfo) => {
+    prescriptionForm.setValue(`medicines.${index}.medicineName`, drug.name, { shouldDirty: true, shouldValidate: true });
+    prescriptionForm.setValue(`medicines.${index}.dosage`, drug.defaultDosage, { shouldDirty: true, shouldValidate: true });
+    prescriptionForm.setValue(`medicines.${index}.frequency`, drug.defaultFrequency, { shouldDirty: true, shouldValidate: true });
+    prescriptionForm.setValue(`medicines.${index}.duration`, drug.defaultDuration, { shouldDirty: true, shouldValidate: true });
+    prescriptionForm.setValue(`medicines.${index}.instructions`, drug.defaultInstructions, { shouldDirty: true, shouldValidate: true });
+    setActiveDrugModalIndex(null);
+    setDrugSearchQuery('');
+    toast({
+      title: "Medication Selected",
+      description: `${drug.name} loaded with standard clinical dosage & guidelines.`,
+    });
   };
 
   const onSaveVitals = async (data: VitalsFormValues) => {
@@ -285,41 +300,15 @@ export default function ConsultationView() {
     }
   };
 
+  const filteredDrugs = UNIVERSAL_DRUG_DATABASE.filter(d => 
+    !drugSearchQuery.trim() || 
+    d.name.toLowerCase().includes(drugSearchQuery.toLowerCase()) || 
+    d.generic.toLowerCase().includes(drugSearchQuery.toLowerCase()) ||
+    d.category.toLowerCase().includes(drugSearchQuery.toLowerCase())
+  );
+
   return (
-    <div className="space-y-6 pb-24 max-w-7xl mx-auto px-1 sm:px-2">
-      {/* Universal Datalists for Auto-Suggest across all Doctor Panels */}
-      <datalist id="universal-drugs-list">
-        {UNIVERSAL_DRUG_DATABASE.map((d, i) => (
-          <option key={i} value={d.name}>
-            {d.category} • {d.generic}
-          </option>
-        ))}
-      </datalist>
-
-      <datalist id="universal-dosage-list">
-        {UNIVERSAL_DOSAGE_OPTIONS.map((dos, i) => (
-          <option key={i} value={dos} />
-        ))}
-      </datalist>
-
-      <datalist id="universal-frequency-list">
-        {UNIVERSAL_FREQUENCY_OPTIONS.map((freq, i) => (
-          <option key={i} value={freq} />
-        ))}
-      </datalist>
-
-      <datalist id="universal-duration-list">
-        {UNIVERSAL_DURATION_OPTIONS.map((dur, i) => (
-          <option key={i} value={dur} />
-        ))}
-      </datalist>
-
-      <datalist id="universal-instructions-list">
-        {UNIVERSAL_INSTRUCTIONS_OPTIONS.map((ins, i) => (
-          <option key={i} value={ins} />
-        ))}
-      </datalist>
-
+    <div className="space-y-6 pb-28 max-w-7xl mx-auto px-1 sm:px-2">
       {/* Top Header & 1-Click Action Hub */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 shadow-sm">
         <div>
@@ -355,6 +344,28 @@ export default function ConsultationView() {
             <span>Download Rx PDF</span>
           </Button>
 
+          <Button 
+            variant="outline"
+            size="sm" 
+            onClick={vitalsForm.handleSubmit(onSaveVitals)} 
+            disabled={saveVitalsMutation.isPending}
+            className="text-xs font-bold gap-1.5 h-9"
+          >
+            <Save className="h-3.5 w-3.5 text-teal-600" />
+            <span>Save Vitals</span>
+          </Button>
+
+          <Button 
+            variant="outline"
+            size="sm" 
+            onClick={prescriptionForm.handleSubmit(onSavePrescription)} 
+            disabled={savePrescriptionMutation.isPending}
+            className="text-xs font-bold gap-1.5 h-9"
+          >
+            <Save className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Save Rx</span>
+          </Button>
+
           {!isCompleted && (
             <>
               <Button 
@@ -372,7 +383,7 @@ export default function ConsultationView() {
               <Button 
                 onClick={handleSignAndCallNext} 
                 disabled={isProcessingAction || completeAndCallNextMutation.isPending}
-                className="bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md gap-2 text-xs h-9 px-4"
+                className="bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md gap-2 text-xs h-9 px-4 cursor-pointer"
               >
                 {isProcessingAction ? (
                   <>
@@ -382,7 +393,7 @@ export default function ConsultationView() {
                 ) : (
                   <>
                     <Sparkles className="h-4 w-4 text-amber-300" />
-                    <span>⚡ Sign Rx & Call Next Patient</span>
+                    <span>⚡ Sign Rx & Call Next</span>
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
@@ -466,17 +477,15 @@ export default function ConsultationView() {
                   <HeartPulse className="w-4 h-4 text-rose-500" />
                   <span>Clinical Vitals</span>
                 </CardTitle>
-                {!isCompleted && (
-                  <Button 
-                    size="sm" 
-                    variant="ghost"
-                    onClick={vitalsForm.handleSubmit(onSaveVitals)} 
-                    disabled={saveVitalsMutation.isPending}
-                    className="h-7 text-xs font-bold text-teal-700 dark:text-teal-400 gap-1 hover:bg-teal-50"
-                  >
-                    <Save className="h-3 w-3" /> Save Vitals
-                  </Button>
-                )}
+                <Button 
+                  size="sm" 
+                  variant="ghost"
+                  onClick={vitalsForm.handleSubmit(onSaveVitals)} 
+                  disabled={saveVitalsMutation.isPending}
+                  className="h-7 text-xs font-bold text-teal-700 dark:text-teal-400 gap-1 hover:bg-teal-50"
+                >
+                  <Save className="h-3 w-3" /> Save
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="p-4">
@@ -487,33 +496,33 @@ export default function ConsultationView() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label htmlFor="bp" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Blood Pressure</Label>
-                      <Input id="bp" placeholder="e.g. 120/80 mmHg" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('bloodPressure')} readOnly={isCompleted} />
+                      <Input id="bp" placeholder="e.g. 120/80 mmHg" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('bloodPressure')} />
                     </div>
                     <div>
                       <Label htmlFor="hr" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Heart Rate (BPM)</Label>
-                      <Input id="hr" type="number" placeholder="72" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('heartRate')} readOnly={isCompleted} />
+                      <Input id="hr" type="number" placeholder="72" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('heartRate')} />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label htmlFor="temp" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Temp (°F)</Label>
-                      <Input id="temp" type="number" step="0.1" placeholder="98.6" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('temperature')} readOnly={isCompleted} />
+                      <Input id="temp" type="number" step="0.1" placeholder="98.6" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('temperature')} />
                     </div>
                     <div>
                       <Label htmlFor="spo2" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">SpO2 (%)</Label>
-                      <Input id="spo2" type="number" placeholder="99" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('spo2')} readOnly={isCompleted} />
+                      <Input id="spo2" type="number" placeholder="99" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('spo2')} />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2.5">
                     <div>
                       <Label htmlFor="wt" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Weight (kg)</Label>
-                      <Input id="wt" type="number" step="0.5" placeholder="70" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('weight')} readOnly={isCompleted} />
+                      <Input id="wt" type="number" step="0.5" placeholder="70" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('weight')} />
                     </div>
                     <div>
                       <Label htmlFor="ht" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Height (cm)</Label>
-                      <Input id="ht" type="number" placeholder="170" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('height')} readOnly={isCompleted} />
+                      <Input id="ht" type="number" placeholder="170" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('height')} />
                     </div>
                     <div>
                       <Label className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">BMI</Label>
@@ -539,20 +548,20 @@ export default function ConsultationView() {
                     <span>Digital Rx Prescription & Medications</span>
                   </CardTitle>
                   <CardDescription className="text-xs text-stone-500 mt-0.5">
-                    Universal drug intelligence catalog enabled for all doctor specialties with 1-click auto-suggestions.
+                    Universal drug intelligence catalog enabled for all doctor specialties with 70+ options in every field.
                   </CardDescription>
                 </div>
-                {!isCompleted && (
+                <div className="flex items-center gap-2">
                   <Button 
                     type="button" 
                     variant="outline" 
                     size="sm" 
-                    onClick={() => appendMed({ medicineName: '', dosage: '500 mg', frequency: '1-0-1 (Twice daily after meals - Morning & Night)', duration: '5 Days (Standard Course)', instructions: 'Take after meals with plenty of water.' })}
-                    className="h-8 text-xs font-bold gap-1 border-teal-600 text-teal-700 dark:text-teal-300 hover:bg-teal-50 shadow-sm"
+                    onClick={() => appendMed({ medicineName: '', dosage: '500 mg', frequency: '1-0-1 (Twice daily after meals - Morning & Night)', duration: '5 Days (Standard Antibiotic / Anti-inflammatory Course)', instructions: 'Take after meals with plenty of water.' })}
+                    className="h-8 text-xs font-bold gap-1 border-teal-600 text-teal-700 dark:text-teal-300 hover:bg-teal-50 shadow-sm cursor-pointer"
                   >
                     <Plus className="h-3.5 w-3.5" /> Add Drug
                   </Button>
-                )}
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-4 space-y-4">
@@ -560,95 +569,175 @@ export default function ConsultationView() {
                 <div className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-teal-600" /></div>
               ) : (
                 <form className="space-y-4">
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {medFields.map((field, index) => (
-                      <div key={field.id} className="p-4 rounded-2xl border border-stone-200 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-900/40 hover:border-teal-500/40 transition-colors space-y-3 shadow-sm">
+                      <div key={field.id} className="p-4 rounded-2xl border border-stone-200 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-900/40 hover:border-teal-500/40 transition-colors space-y-3.5 shadow-sm">
                         <div className="flex items-center justify-between text-xs font-bold text-stone-700 dark:text-stone-300 pb-2 border-b border-stone-200/60 dark:border-stone-800">
-                          <span className="flex items-center gap-1.5 text-teal-700 dark:text-teal-400">
-                            <Pill className="w-3.5 h-3.5" /> Medication #{index + 1}
+                          <span className="flex items-center gap-1.5 text-teal-700 dark:text-teal-400 font-bold text-sm">
+                            <Pill className="w-4 h-4" /> Medication #{index + 1}
                           </span>
-                          {!isCompleted && medFields.length > 1 && (
+                          <div className="flex items-center gap-2">
                             <Button 
                               type="button" 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-6 px-2 text-rose-600 hover:bg-rose-50 text-[11px] font-bold"
-                              onClick={() => removeMed(index)}
+                              variant="outline" 
+                              size="sm"
+                              className="h-7 px-2.5 text-[11px] font-bold text-teal-700 border-teal-300 hover:bg-teal-50 gap-1"
+                              onClick={() => {
+                                setActiveDrugModalIndex(index);
+                                setDrugSearchQuery('');
+                              }}
                             >
-                              <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
+                              <Search className="w-3 h-3" /> Select from 75+ Drug Catalog
                             </Button>
-                          )}
+                            {medFields.length > 1 && (
+                              <Button 
+                                type="button" 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-7 px-2 text-rose-600 hover:bg-rose-50 text-[11px] font-bold"
+                                onClick={() => removeMed(index)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
+                              </Button>
+                            )}
+                          </div>
                         </div>
 
-                        {/* Row 1: Medicine Name & Generic (With Datalist Autocomplete) */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="sm:col-span-2">
-                            <Label className="text-[11px] font-bold text-stone-700 dark:text-stone-300">
-                              Medicine Name & Generic Formula <span className="text-teal-600">(Auto-Suggest Active)</span>
+                        {/* Row 1: Medicine Name & Generic */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[11px] font-bold text-stone-800 dark:text-stone-200">
+                              1. Medicine Name & Generic Formula (Type freely or Pick from 75+ Catalog)
                             </Label>
+                            <span className="text-[10px] text-teal-600 font-semibold">⚡ Auto-fills Dosage, Frequency & Duration</span>
+                          </div>
+                          <div className="flex gap-2">
                             <Input 
-                              list="universal-drugs-list"
-                              placeholder="Type or select: e.g. Paracetamol 650mg, Augmentin 625, Pantoprazole 40mg..." 
-                              className="h-9 text-xs font-semibold mt-1 bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
+                              placeholder="e.g. Paracetamol 650mg, Augmentin 625mg, Pan-D, Telma-AM..." 
+                              className="h-9 text-xs font-semibold bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700 flex-1"
                               {...prescriptionForm.register(`medicines.${index}.medicineName` as const)}
-                              onChange={(e) => handleDrugNameChange(index, e.target.value)}
-                              readOnly={isCompleted}
                             />
-                          </div>
-
-                          <div>
-                            <Label className="text-[11px] font-bold text-stone-700 dark:text-stone-300">
-                              Dosage / Strength
-                            </Label>
-                            <Input 
-                              list="universal-dosage-list"
-                              placeholder="e.g. 650 mg, 500 mg, 5 ml..." 
-                              className="h-9 text-xs font-semibold mt-1 bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
-                              {...prescriptionForm.register(`medicines.${index}.dosage` as const)}
-                              readOnly={isCompleted}
-                            />
+                            <select 
+                              className="h-9 px-2 text-xs font-medium bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-md max-w-[180px] cursor-pointer"
+                              onChange={(e) => {
+                                const selected = UNIVERSAL_DRUG_DATABASE.find(d => d.name === e.target.value);
+                                if (selected) applyDrugToRow(index, selected);
+                              }}
+                              value=""
+                            >
+                              <option value="" disabled>⚡ Quick Pick (75+ Drugs)...</option>
+                              {UNIVERSAL_DRUG_DATABASE.map((d, i) => (
+                                <option key={i} value={d.name}>
+                                  {d.name}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         </div>
 
-                        {/* Row 2: Frequency, Duration, Special Instructions */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div>
+                        {/* Row 2: Dosage & Frequency */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
                             <Label className="text-[11px] font-bold text-stone-700 dark:text-stone-300">
-                              Frequency (Clinical Pattern)
+                              2. Dosage / Strength (Type or Pick from 80+ Options)
                             </Label>
-                            <Input 
-                              list="universal-frequency-list"
-                              placeholder="e.g. 1-0-1 (Morning & Night)..." 
-                              className="h-9 text-xs font-mono font-medium mt-1 bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
-                              {...prescriptionForm.register(`medicines.${index}.frequency` as const)}
-                              readOnly={isCompleted}
-                            />
+                            <div className="flex gap-1.5">
+                              <Input 
+                                placeholder="e.g. 650 mg, 500 mg, 10 ml, 2 puffs..." 
+                                className="h-8 text-xs font-semibold bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700 flex-1"
+                                {...prescriptionForm.register(`medicines.${index}.dosage` as const)}
+                              />
+                              <select 
+                                className="h-8 px-2 text-xs bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-md max-w-[120px]"
+                                onChange={(e) => {
+                                  if (e.target.value) prescriptionForm.setValue(`medicines.${index}.dosage`, e.target.value, { shouldDirty: true });
+                                }}
+                                value=""
+                              >
+                                <option value="" disabled>Presets...</option>
+                                {UNIVERSAL_DOSAGE_OPTIONS.map((dos, i) => (
+                                  <option key={i} value={dos}>{dos}</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
 
-                          <div>
+                          <div className="space-y-1">
                             <Label className="text-[11px] font-bold text-stone-700 dark:text-stone-300">
-                              Duration
+                              3. Frequency / Pattern (Type or Pick from 70+ Patterns)
                             </Label>
-                            <Input 
-                              list="universal-duration-list"
-                              placeholder="e.g. 5 Days (Standard Course)..." 
-                              className="h-9 text-xs font-medium mt-1 bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
-                              {...prescriptionForm.register(`medicines.${index}.duration` as const)}
-                              readOnly={isCompleted}
-                            />
+                            <div className="flex gap-1.5">
+                              <Input 
+                                placeholder="e.g. 1-0-1 (Morning & Night)..." 
+                                className="h-8 text-xs font-mono font-medium bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700 flex-1"
+                                {...prescriptionForm.register(`medicines.${index}.frequency` as const)}
+                              />
+                              <select 
+                                className="h-8 px-2 text-xs bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-md max-w-[120px]"
+                                onChange={(e) => {
+                                  if (e.target.value) prescriptionForm.setValue(`medicines.${index}.frequency`, e.target.value, { shouldDirty: true });
+                                }}
+                                value=""
+                              >
+                                <option value="" disabled>Patterns...</option>
+                                {UNIVERSAL_FREQUENCY_OPTIONS.map((freq, i) => (
+                                  <option key={i} value={freq}>{freq.split(' ')[0]} {freq.slice(0, 20)}...</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Row 3: Duration & Special Instructions */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-[11px] font-bold text-stone-700 dark:text-stone-300">
+                              4. Duration (Type or Pick from 70+ Durations)
+                            </Label>
+                            <div className="flex gap-1.5">
+                              <Input 
+                                placeholder="e.g. 5 Days (Standard Course), 1 Month..." 
+                                className="h-8 text-xs font-medium bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700 flex-1"
+                                {...prescriptionForm.register(`medicines.${index}.duration` as const)}
+                              />
+                              <select 
+                                className="h-8 px-2 text-xs bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-md max-w-[120px]"
+                                onChange={(e) => {
+                                  if (e.target.value) prescriptionForm.setValue(`medicines.${index}.duration`, e.target.value, { shouldDirty: true });
+                                }}
+                                value=""
+                              >
+                                <option value="" disabled>Duration...</option>
+                                {UNIVERSAL_DURATION_OPTIONS.map((dur, i) => (
+                                  <option key={i} value={dur}>{dur}</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
 
-                          <div>
+                          <div className="space-y-1">
                             <Label className="text-[11px] font-bold text-stone-700 dark:text-stone-300">
-                              Special Instructions
+                              5. Special Instructions (Type or Pick from 70+ Instructions)
                             </Label>
-                            <Input 
-                              list="universal-instructions-list"
-                              placeholder="e.g. Take after meals with plenty of water..." 
-                              className="h-9 text-xs font-medium mt-1 bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
-                              {...prescriptionForm.register(`medicines.${index}.instructions` as const)}
-                              readOnly={isCompleted}
-                            />
+                            <div className="flex gap-1.5">
+                              <Input 
+                                placeholder="e.g. Take after meals with water..." 
+                                className="h-8 text-xs font-medium bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700 flex-1"
+                                {...prescriptionForm.register(`medicines.${index}.instructions` as const)}
+                              />
+                              <select 
+                                className="h-8 px-2 text-xs bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-md max-w-[120px]"
+                                onChange={(e) => {
+                                  if (e.target.value) prescriptionForm.setValue(`medicines.${index}.instructions`, e.target.value, { shouldDirty: true });
+                                }}
+                                value=""
+                              >
+                                <option value="" disabled>Guidelines...</option>
+                                {UNIVERSAL_INSTRUCTIONS_OPTIONS.map((ins, i) => (
+                                  <option key={i} value={ins}>{ins.slice(0, 30)}...</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -680,7 +769,6 @@ export default function ConsultationView() {
                       placeholder="e.g. Low sodium diet, 30 min brisk walking daily, maintain hydration, review with FBS/PPBS reports after 7 days..." 
                       className="min-h-[90px] text-xs font-medium leading-relaxed bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
                       {...prescriptionForm.register('notes')} 
-                      readOnly={isCompleted}
                     />
                   </div>
                 </form>
@@ -689,6 +777,85 @@ export default function ConsultationView() {
           </Card>
         </div>
       </div>
+
+      {/* Interactive 75+ Universal Drug Catalog Modal */}
+      {activeDrugModalIndex !== null && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="p-4 border-b border-stone-200 dark:border-stone-800 flex items-center justify-between bg-stone-50 dark:bg-stone-800/50">
+              <div>
+                <h3 className="font-bold text-base text-stone-900 dark:text-white flex items-center gap-2">
+                  <Pill className="w-5 h-5 text-teal-600" />
+                  Select from 75+ Universal Clinical Drug Catalog
+                </h3>
+                <p className="text-xs text-stone-500">
+                  Selecting any medication will automatically fill standard dosage, frequency, duration, and instructions.
+                </p>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setActiveDrugModalIndex(null)}
+                className="h-8 w-8 p-0 rounded-full"
+              >
+                ✕
+              </Button>
+            </div>
+
+            <div className="p-4 border-b border-stone-200 dark:border-stone-800">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400" />
+                <Input 
+                  placeholder="Search by brand name, generic formula, or category (e.g. Paracetamol, Augmentin, Cardiology, PPI)..." 
+                  value={drugSearchQuery}
+                  onChange={(e) => setDrugSearchQuery(e.target.value)}
+                  className="pl-9 h-9 text-xs"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-2 divide-y divide-stone-100 dark:divide-stone-800">
+              {filteredDrugs.map((drug, i) => (
+                <div 
+                  key={i}
+                  onClick={() => applyDrugToRow(activeDrugModalIndex, drug)}
+                  className="pt-2.5 pb-2.5 px-3 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40 cursor-pointer transition-colors flex items-center justify-between group"
+                >
+                  <div className="space-y-0.5">
+                    <div className="font-bold text-xs text-stone-900 dark:text-stone-100 group-hover:text-teal-700 dark:group-hover:text-teal-300 flex items-center gap-2">
+                      <span>{drug.name}</span>
+                      <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 border text-stone-600 dark:text-stone-300">
+                        {drug.category}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-stone-500 italic">
+                      Formula: {drug.generic}
+                    </div>
+                    <div className="text-[11px] text-teal-700 dark:text-teal-400 font-medium">
+                      Default: {drug.defaultDosage} • {drug.defaultFrequency.split(' ')[0]} • {drug.defaultDuration}
+                    </div>
+                  </div>
+                  <Button size="sm" className="h-7 text-xs bg-teal-600 hover:bg-teal-700 text-white font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                    Select ⚡
+                  </Button>
+                </div>
+              ))}
+              {filteredDrugs.length === 0 && (
+                <div className="p-8 text-center text-xs text-muted-foreground">
+                  No drugs found matching "{drugSearchQuery}". You can type any custom name directly into the prescription box.
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 bg-stone-50 dark:bg-stone-800/50 border-t border-stone-200 dark:border-stone-800 text-right">
+              <Button variant="outline" size="sm" onClick={() => setActiveDrugModalIndex(null)} className="text-xs">
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Bottom Quick-Action Bar */}
       {!isCompleted && (
