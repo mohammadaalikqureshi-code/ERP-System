@@ -39,6 +39,19 @@ import { Patient, Doctor } from '@/types';
 
 type BookingFormValues = z.infer<typeof appointmentCreateSchema>;
 
+export const getDoctorDisplayName = (doc: any): string => {
+  if (!doc) return 'Doctor';
+  const raw =
+    doc.user?.fullName ||
+    doc.user?.full_name ||
+    doc.fullName ||
+    doc.full_name ||
+    (doc.firstName && doc.firstName !== 'Doctor' ? `${doc.firstName} ${doc.lastName || ''}`.trim() : '') ||
+    (doc.user ? `${doc.user.firstName || doc.user.first_name || ''} ${doc.user.lastName || doc.user.last_name || ''}`.trim() : '') ||
+    (doc.department ? `${doc.department} Specialist` : 'Doctor');
+  return raw.replace(/^Dr\.?\s*/i, '').trim() || 'Doctor';
+};
+
 const AppointmentBookingContent = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -572,7 +585,7 @@ const AppointmentBookingContent = () => {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {doctors.map((doc: any) => {
                           const isSelected = selectedDoctorId === doc.id;
-                          const name = doc.user?.fullName || doc.fullName || 'Doctor';
+                          const name = getDoctorDisplayName(doc);
                           const fee = doc.consultationFee || 500;
                           const dept = doc.department || 'General OPD';
 
@@ -721,7 +734,7 @@ const AppointmentBookingContent = () => {
                           <SelectContent>
                             {doctors.map((d: any) => (
                               <SelectItem key={d.id} value={d.id}>
-                                Dr. {d.user?.fullName || d.fullName} ({d.department})
+                                Dr. {getDoctorDisplayName(d)} ({d.department})
                               </SelectItem>
                             ))}
                           </SelectContent>

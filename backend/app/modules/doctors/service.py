@@ -27,7 +27,8 @@ class DoctorService:
         return real_id if real_id else doctor_or_user_id
 
     async def get_doctor(self, clinic_id: uuid.UUID, doctor_id: uuid.UUID):
-        stmt = select(Doctor).where(
+        from sqlalchemy.orm import selectinload
+        stmt = select(Doctor).options(selectinload(Doctor.user)).where(
             ((Doctor.id == doctor_id) | (Doctor.user_id == doctor_id)),
             Doctor.clinic_id == clinic_id,
             Doctor.is_deleted == False
@@ -45,6 +46,18 @@ class DoctorService:
         docs = result.scalars().all()
         response = []
         for d in docs:
+            full_name = d.user.full_name if d.user and d.user.full_name else (f"{d.user.first_name or ''} {d.user.last_name or ''}".strip() if d.user else "Doctor")
+            user_data = None
+            if d.user:
+                user_data = {
+                    "id": d.user.id,
+                    "email": d.user.email or "",
+                    "first_name": d.user.first_name or "",
+                    "last_name": d.user.last_name or "",
+                    "full_name": full_name,
+                    "fullName": full_name,
+                    "role": d.user.role or "doctor",
+                }
             response.append({
                 "id": str(d.id),
                 "clinic_id": str(d.clinic_id),
@@ -57,8 +70,12 @@ class DoctorService:
                 "signature_url": d.signature_url,
                 "is_available": d.is_available,
                 "isActive": d.is_available,
-                "firstName": d.user.full_name if d.user else "Doctor",
-                "lastName": ""
+                "firstName": full_name,
+                "lastName": "",
+                "fullName": full_name,
+                "full_name": full_name,
+                "name": full_name,
+                "user": user_data
             })
         return response
 

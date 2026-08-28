@@ -19,12 +19,26 @@ class DoctorCreate(DoctorBase):
 class DoctorUpdate(DoctorBase):
     pass
 
+class DoctorUserResponse(BaseModel):
+    id: uuid.UUID
+    email: Optional[str] = ""
+    first_name: Optional[str] = ""
+    last_name: Optional[str] = ""
+    full_name: Optional[str] = ""
+    fullName: Optional[str] = ""
+    role: Optional[str] = ""
+    model_config = {"from_attributes": True}
+
 class DoctorResponse(DoctorBase):
     id: uuid.UUID
     clinic_id: uuid.UUID
     user_id: uuid.UUID
     firstName: Optional[str] = ""
     lastName: Optional[str] = ""
+    fullName: Optional[str] = ""
+    full_name: Optional[str] = ""
+    name: Optional[str] = ""
+    user: Optional[DoctorUserResponse] = None
     isActive: Optional[bool] = True
     model_config = {"from_attributes": True}
 
