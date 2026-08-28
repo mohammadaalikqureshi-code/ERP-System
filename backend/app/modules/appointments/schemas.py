@@ -63,6 +63,25 @@ class RescheduleRequest(BaseModel):
     appointment_time: time
 
 
+class PatientMiniResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    patient_code: Optional[str] = None
+    full_name: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    blood_group: Optional[str] = None
+    mobile: Optional[str] = None
+    allergies: Optional[str] = None
+
+
+class DoctorMiniResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    specialization: Optional[str] = None
+    department: Optional[str] = None
+
+
 class AppointmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -82,6 +101,8 @@ class AppointmentResponse(BaseModel):
     checked_in_at: Optional[datetime] = None
     consultation_started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    patient: Optional[PatientMiniResponse] = None
+    doctor: Optional[DoctorMiniResponse] = None
 
 
 class QueueResponse(BaseModel):

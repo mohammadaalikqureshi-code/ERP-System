@@ -11,9 +11,20 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { FileText, CheckCircle, Plus, Trash2, Loader2, Save, Sparkles, ArrowRight, Activity, HeartPulse, User, Pill } from 'lucide-react';
+import { 
+  FileText, CheckCircle, Plus, Trash2, Loader2, Save, Sparkles, 
+  ArrowRight, Activity, HeartPulse, User, Pill, Stethoscope, 
+  Phone, AlertTriangle, ShieldCheck, Clock, Check
+} from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { 
+  UNIVERSAL_DRUG_DATABASE, 
+  UNIVERSAL_FREQUENCY_OPTIONS, 
+  UNIVERSAL_DOSAGE_OPTIONS, 
+  UNIVERSAL_DURATION_OPTIONS, 
+  UNIVERSAL_INSTRUCTIONS_OPTIONS 
+} from '@/data/drugDatabase';
 
 const vitalsSchema = z.object({
   bloodPressure: z.string().optional(),
@@ -31,10 +42,10 @@ const prescriptionSchema = z.object({
   notes: z.string().optional(),
   medicines: z.array(
     z.object({
-      medicineName: z.string().min(1, 'Required'),
-      dosage: z.string().min(1, 'Required'),
-      frequency: z.string().min(1, 'Required'),
-      duration: z.string().min(1, 'Required'),
+      medicineName: z.string().min(1, 'Medicine name is required'),
+      dosage: z.string().min(1, 'Dosage is required'),
+      frequency: z.string().min(1, 'Frequency is required'),
+      duration: z.string().min(1, 'Duration is required'),
       instructions: z.string().optional(),
     })
   ),
@@ -95,10 +106,31 @@ export default function ConsultationView() {
     if (prescriptionData) {
       prescriptionForm.reset({
         notes: prescriptionData.notes,
-        medicines: prescriptionData.medicines?.length > 0 ? prescriptionData.medicines : [{ medicineName: '', dosage: '', frequency: '', duration: '', instructions: '' }],
+        medicines: prescriptionData.medicines?.length > 0 
+          ? prescriptionData.medicines 
+          : [{ medicineName: '', dosage: '', frequency: '', duration: '', instructions: '' }],
       });
     }
   }, [prescriptionData, prescriptionForm]);
+
+  // Drug Autocomplete handler: Auto-populates dosage, frequency, duration, and instructions
+  const handleDrugNameChange = (index: number, value: string) => {
+    prescriptionForm.setValue(`medicines.${index}.medicineName`, value);
+    
+    // Check if entered or chosen value matches any item in the universal catalog
+    const matched = UNIVERSAL_DRUG_DATABASE.find(
+      (d) => d.name.toLowerCase() === value.toLowerCase() ||
+             d.generic.toLowerCase() === value.toLowerCase() ||
+             d.name.toLowerCase().startsWith(value.toLowerCase())
+    );
+
+    if (matched) {
+      prescriptionForm.setValue(`medicines.${index}.dosage`, matched.defaultDosage);
+      prescriptionForm.setValue(`medicines.${index}.frequency`, matched.defaultFrequency);
+      prescriptionForm.setValue(`medicines.${index}.duration`, matched.defaultDuration);
+      prescriptionForm.setValue(`medicines.${index}.instructions`, matched.defaultInstructions);
+    }
+  };
 
   const onSaveVitals = async (data: VitalsFormValues) => {
     const heightM = (data.height || 0) / 100;
@@ -111,7 +143,7 @@ export default function ConsultationView() {
         ...data,
         bmi,
       });
-      toast({ title: 'Vitals saved successfully', variant: 'success' });
+      toast({ title: 'Patient vitals saved successfully', variant: 'success' });
     } catch {
       toast({ title: 'Failed to save vitals', variant: 'destructive' });
     }
@@ -210,7 +242,11 @@ export default function ConsultationView() {
   const bmi = (weight && height) ? (weight / Math.pow(height / 100, 2)).toFixed(2) : '-';
 
   if (isLoadingAppt) {
-    return <div className="flex h-full items-center justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></div>;
+    return (
+      <div className="flex h-full items-center justify-center p-16">
+        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+      </div>
+    );
   }
 
   if (!appointment) {
@@ -218,7 +254,13 @@ export default function ConsultationView() {
   }
 
   const isCompleted = appointment.status === 'completed';
-  const patientFullName = appointment.patient?.fullName || `${appointment.patient?.firstName || ''} ${appointment.patient?.lastName || ''}`.trim() || 'Patient';
+  const patient = appointment.patient;
+  const patientFullName = patient?.fullName || patient?.full_name || 'Patient';
+  const patientCode = patient?.patientCode || patient?.patient_code || `PT-${String(appointment.queueNumber || 1).padStart(5, '0')}`;
+  const patientAge = patient?.age ? `${patient.age} Y` : '—';
+  const patientGender = patient?.gender ? (patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1)) : '—';
+  const patientBloodGroup = patient?.bloodGroup || patient?.blood_group || 'O+';
+  const patientMobile = patient?.mobile || '—';
 
   const handleDownloadPrescriptionPdf = async () => {
     try {
@@ -244,16 +286,73 @@ export default function ConsultationView() {
   };
 
   return (
-    <div className="space-y-6 pb-20 max-w-7xl mx-auto">
+    <div className="space-y-6 pb-24 max-w-7xl mx-auto px-1 sm:px-2">
+      {/* Universal Datalists for Auto-Suggest across all Doctor Panels */}
+      <datalist id="universal-drugs-list">
+        {UNIVERSAL_DRUG_DATABASE.map((d, i) => (
+          <option key={i} value={d.name}>
+            {d.category} • {d.generic}
+          </option>
+        ))}
+      </datalist>
+
+      <datalist id="universal-dosage-list">
+        {UNIVERSAL_DOSAGE_OPTIONS.map((dos, i) => (
+          <option key={i} value={dos} />
+        ))}
+      </datalist>
+
+      <datalist id="universal-frequency-list">
+        {UNIVERSAL_FREQUENCY_OPTIONS.map((freq, i) => (
+          <option key={i} value={freq} />
+        ))}
+      </datalist>
+
+      <datalist id="universal-duration-list">
+        {UNIVERSAL_DURATION_OPTIONS.map((dur, i) => (
+          <option key={i} value={dur} />
+        ))}
+      </datalist>
+
+      <datalist id="universal-instructions-list">
+        {UNIVERSAL_INSTRUCTIONS_OPTIONS.map((ins, i) => (
+          <option key={i} value={ins} />
+        ))}
+      </datalist>
+
       {/* Top Header & 1-Click Action Hub */}
-      <PageHeader 
-        title="Doctor Consultation Suite" 
-        description={`Active Token #${appointment.tokenNumber} • Patient: ${patientFullName}`}
-      >
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 shadow-sm">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-teal-600 text-white rounded-xl shadow-md">
+              <Stethoscope className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-black text-stone-900 dark:text-white tracking-tight">
+                  Doctor Consultation Suite
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black font-mono bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border border-teal-300">
+                  Token #{appointment.tokenNumber}
+                </span>
+              </div>
+              <p className="text-xs font-medium text-stone-500 dark:text-stone-400 mt-0.5">
+                Consulting: <strong className="text-stone-800 dark:text-stone-200 font-bold">{patientFullName}</strong> • {appointment.department || 'OPD'}
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button variant="outline" size="sm" disabled={!prescriptionData} onClick={handleDownloadPrescriptionPdf} className="text-xs">
-            <FileText className="mr-1.5 h-3.5 w-3.5" />
-            PDF Rx
+          <Button 
+            variant="outline" 
+            size="sm" 
+            disabled={!prescriptionData} 
+            onClick={handleDownloadPrescriptionPdf} 
+            className="text-xs font-bold gap-1.5 h-9"
+          >
+            <FileText className="h-3.5 w-3.5 text-teal-600" />
+            <span>Download Rx PDF</span>
           </Button>
 
           {!isCompleted && (
@@ -263,17 +362,17 @@ export default function ConsultationView() {
                 size="sm" 
                 onClick={completeConsultation} 
                 disabled={updateStatusMutation.isPending || isProcessingAction}
-                className="text-xs"
+                className="text-xs font-semibold h-9"
               >
-                {updateStatusMutation.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="mr-1.5 h-3.5 w-3.5" />}
+                {updateStatusMutation.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />}
                 Complete Only
               </Button>
 
-              {/* 🏆 THE #1 BEST WAY: 1-CLICK SIGN & CALL NEXT BUTTON */}
+              {/* ⚡ 1-CLICK SIGN & CALL NEXT BUTTON */}
               <Button 
                 onClick={handleSignAndCallNext} 
                 disabled={isProcessingAction || completeAndCallNextMutation.isPending}
-                className="bg-teal-600 hover:bg-teal-700 text-white font-semibold shadow-md gap-2 text-xs h-9 px-4 animate-in fade-in"
+                className="bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md gap-2 text-xs h-9 px-4"
               >
                 {isProcessingAction ? (
                   <>
@@ -283,7 +382,7 @@ export default function ConsultationView() {
                 ) : (
                   <>
                     <Sparkles className="h-4 w-4 text-amber-300" />
-                    ⚡ Sign Rx & Call Next Patient
+                    <span>⚡ Sign Rx & Call Next Patient</span>
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
@@ -291,107 +390,134 @@ export default function ConsultationView() {
             </>
           )}
         </div>
-      </PageHeader>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT COLUMN: Patient Demographics & Vitals */}
         <div className="space-y-6">
-          <Card className="border shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex justify-between items-center">
-                <span className="flex items-center gap-2">
+          {/* Patient Profile Card */}
+          <Card className="border border-stone-200 dark:border-stone-800 shadow-sm overflow-hidden">
+            <CardHeader className="bg-stone-50/80 dark:bg-stone-900/60 pb-3 border-b border-stone-100 dark:border-stone-800">
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-stone-900 dark:text-stone-100">
                   <User className="w-4 h-4 text-teal-600" />
-                  Patient Profile
-                </span>
+                  <span>Patient Demographics</span>
+                </CardTitle>
                 <StatusBadge status={appointment.status} />
-              </CardTitle>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-2 pb-3 border-b">
-                <div className="text-muted-foreground">Serial Code:</div>
-                <div className="font-mono font-bold text-teal-700 dark:text-teal-400">{appointment.patient?.patientCode || 'PT-00001'}</div>
-                
-                <div className="text-muted-foreground">Full Name:</div>
-                <div className="font-semibold text-foreground">{patientFullName}</div>
-
-                <div className="text-muted-foreground">Age / Gender:</div>
-                <div className="font-medium">{appointment.patient?.age ? `${appointment.patient.age} Y` : '-'} / {appointment.patient?.gender || '-'}</div>
-
-                <div className="text-muted-foreground">Blood Group:</div>
-                <div className="font-bold text-rose-600">{appointment.patient?.bloodGroup || 'O+'}</div>
-
-                <div className="text-muted-foreground">Mobile:</div>
-                <div className="font-mono">{appointment.patient?.mobile || '-'}</div>
+            <CardContent className="p-4 space-y-3.5 text-xs">
+              <div className="flex items-center gap-3 pb-3 border-b border-stone-100 dark:border-stone-800">
+                <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 font-bold flex items-center justify-center text-sm">
+                  {patientFullName.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-stone-900 dark:text-stone-100">{patientFullName}</div>
+                  <div className="text-[11px] font-mono text-teal-700 dark:text-teal-400 font-bold">UHID: {patientCode}</div>
+                </div>
               </div>
 
-              {appointment.patient?.allergies && (
-                <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300">
-                  <span className="font-bold">⚠️ Known Allergies:</span> {appointment.patient.allergies}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-stone-500 font-medium">Age & Gender:</span>
+                  <span className="font-bold text-stone-900 dark:text-stone-100 px-2 py-0.5 rounded bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700">
+                    {patientAge} • {patientGender}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-stone-500 font-medium">Blood Group:</span>
+                  <span className="font-bold text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900">
+                    🩸 {patientBloodGroup}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-stone-500 font-medium">Mobile Number:</span>
+                  <span className="font-mono font-semibold text-stone-900 dark:text-stone-100 flex items-center gap-1">
+                    <Phone className="w-3 h-3 text-stone-400" /> {patientMobile}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-stone-500 font-medium">Token & Room:</span>
+                  <span className="font-mono font-bold text-teal-700 dark:text-teal-300">
+                    Token #{appointment.tokenNumber} • Queue #{appointment.queueNumber}
+                  </span>
+                </div>
+              </div>
+
+              {patient?.allergies && (
+                <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 font-medium">
+                  <span className="font-bold flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> Known Allergies:
+                  </span>
+                  <div className="mt-0.5 text-xs">{patient.allergies}</div>
                 </div>
               )}
             </CardContent>
           </Card>
 
           {/* Vitals Form Card */}
-          <Card className="border shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center justify-between">
-                <span className="flex items-center gap-2">
+          <Card className="border border-stone-200 dark:border-stone-800 shadow-sm">
+            <CardHeader className="pb-3 border-b border-stone-100 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-900/60">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-stone-900 dark:text-stone-100">
                   <HeartPulse className="w-4 h-4 text-rose-500" />
-                  Patient Vitals
-                </span>
+                  <span>Clinical Vitals</span>
+                </CardTitle>
                 {!isCompleted && (
                   <Button 
                     size="sm" 
                     variant="ghost"
                     onClick={vitalsForm.handleSubmit(onSaveVitals)} 
                     disabled={saveVitalsMutation.isPending}
-                    className="h-7 text-xs text-teal-700 gap-1 hover:bg-teal-50"
+                    className="h-7 text-xs font-bold text-teal-700 dark:text-teal-400 gap-1 hover:bg-teal-50"
                   >
                     <Save className="h-3 w-3" /> Save Vitals
                   </Button>
                 )}
-              </CardTitle>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4">
               {isLoadingVitals ? (
                 <div className="p-4 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
               ) : (
-                <form className="space-y-3 text-xs">
+                <form className="space-y-3.5 text-xs">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label htmlFor="bp">Blood Pressure</Label>
-                      <Input id="bp" placeholder="e.g. 120/80" className="h-8 text-xs font-mono" {...vitalsForm.register('bloodPressure')} readOnly={isCompleted} />
+                      <Label htmlFor="bp" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Blood Pressure</Label>
+                      <Input id="bp" placeholder="e.g. 120/80 mmHg" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('bloodPressure')} readOnly={isCompleted} />
                     </div>
                     <div>
-                      <Label htmlFor="hr">Heart Rate (BPM)</Label>
-                      <Input id="hr" type="number" placeholder="72" className="h-8 text-xs font-mono" {...vitalsForm.register('heartRate')} readOnly={isCompleted} />
+                      <Label htmlFor="hr" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Heart Rate (BPM)</Label>
+                      <Input id="hr" type="number" placeholder="72" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('heartRate')} readOnly={isCompleted} />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label htmlFor="temp">Temp (°F)</Label>
-                      <Input id="temp" type="number" step="0.1" placeholder="98.6" className="h-8 text-xs font-mono" {...vitalsForm.register('temperature')} readOnly={isCompleted} />
+                      <Label htmlFor="temp" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Temp (°F)</Label>
+                      <Input id="temp" type="number" step="0.1" placeholder="98.6" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('temperature')} readOnly={isCompleted} />
                     </div>
                     <div>
-                      <Label htmlFor="spo2">SpO2 (%)</Label>
-                      <Input id="spo2" type="number" placeholder="98" className="h-8 text-xs font-mono" {...vitalsForm.register('spo2')} readOnly={isCompleted} />
+                      <Label htmlFor="spo2" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">SpO2 (%)</Label>
+                      <Input id="spo2" type="number" placeholder="99" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('spo2')} readOnly={isCompleted} />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-2.5">
                     <div>
-                      <Label htmlFor="wt">Weight (kg)</Label>
-                      <Input id="wt" type="number" step="0.5" placeholder="70" className="h-8 text-xs font-mono" {...vitalsForm.register('weight')} readOnly={isCompleted} />
+                      <Label htmlFor="wt" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Weight (kg)</Label>
+                      <Input id="wt" type="number" step="0.5" placeholder="70" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('weight')} readOnly={isCompleted} />
                     </div>
                     <div>
-                      <Label htmlFor="ht">Height (cm)</Label>
-                      <Input id="ht" type="number" placeholder="170" className="h-8 text-xs font-mono" {...vitalsForm.register('height')} readOnly={isCompleted} />
+                      <Label htmlFor="ht" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Height (cm)</Label>
+                      <Input id="ht" type="number" placeholder="170" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('height')} readOnly={isCompleted} />
                     </div>
                     <div>
-                      <Label>BMI</Label>
-                      <div className="h-8 flex items-center justify-center font-mono font-bold bg-muted rounded border text-xs">
+                      <Label className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">BMI</Label>
+                      <div className="h-8 flex items-center justify-center font-mono font-bold bg-stone-100 dark:bg-stone-800 text-teal-700 dark:text-teal-300 rounded border border-stone-200 dark:border-stone-700 text-xs mt-1">
                         {bmi}
                       </div>
                     </div>
@@ -402,18 +528,18 @@ export default function ConsultationView() {
           </Card>
         </div>
 
-        {/* RIGHT COLUMN: Digital Prescription (Rx) & Clinical Notes */}
+        {/* RIGHT COLUMN: Digital Prescription (Rx) & Medications Intelligence Suite */}
         <div className="lg:col-span-2 space-y-6">
-          <Card className="border shadow-sm">
-            <CardHeader className="pb-3 border-b">
+          <Card className="border border-stone-200 dark:border-stone-800 shadow-sm">
+            <CardHeader className="pb-3 border-b border-stone-100 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-900/60">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-base flex items-center gap-2">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2 text-stone-900 dark:text-stone-100">
                     <Pill className="w-4 h-4 text-teal-600" />
-                    Digital Rx Prescription & Medications
+                    <span>Digital Rx Prescription & Medications</span>
                   </CardTitle>
-                  <CardDescription className="text-xs">
-                    Prescribed drugs are synced live with Hospital Pharmacy for rapid dispensing.
+                  <CardDescription className="text-xs text-stone-500 mt-0.5">
+                    Universal drug intelligence catalog enabled for all doctor specialties with 1-click auto-suggestions.
                   </CardDescription>
                 </div>
                 {!isCompleted && (
@@ -421,8 +547,8 @@ export default function ConsultationView() {
                     type="button" 
                     variant="outline" 
                     size="sm" 
-                    onClick={() => appendMed({ medicineName: '', dosage: '500mg', frequency: '1-0-1', duration: '5 days', instructions: 'After meals' })}
-                    className="h-8 text-xs gap-1 border-teal-600 text-teal-700 dark:text-teal-300 hover:bg-teal-50"
+                    onClick={() => appendMed({ medicineName: '', dosage: '500 mg', frequency: '1-0-1 (Twice daily after meals - Morning & Night)', duration: '5 Days (Standard Course)', instructions: 'Take after meals with plenty of water.' })}
+                    className="h-8 text-xs font-bold gap-1 border-teal-600 text-teal-700 dark:text-teal-300 hover:bg-teal-50 shadow-sm"
                   >
                     <Plus className="h-3.5 w-3.5" /> Add Drug
                   </Button>
@@ -436,67 +562,90 @@ export default function ConsultationView() {
                 <form className="space-y-4">
                   <div className="space-y-3">
                     {medFields.map((field, index) => (
-                      <div key={field.id} className="p-3.5 rounded-xl border bg-muted/20 hover:bg-muted/40 transition-colors space-y-2.5">
-                        <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
-                          <span>Medication #{index + 1}</span>
+                      <div key={field.id} className="p-4 rounded-2xl border border-stone-200 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-900/40 hover:border-teal-500/40 transition-colors space-y-3 shadow-sm">
+                        <div className="flex items-center justify-between text-xs font-bold text-stone-700 dark:text-stone-300 pb-2 border-b border-stone-200/60 dark:border-stone-800">
+                          <span className="flex items-center gap-1.5 text-teal-700 dark:text-teal-400">
+                            <Pill className="w-3.5 h-3.5" /> Medication #{index + 1}
+                          </span>
                           {!isCompleted && medFields.length > 1 && (
                             <Button 
                               type="button" 
                               variant="ghost" 
-                              size="icon" 
-                              className="h-6 w-6 text-rose-600 hover:bg-rose-50"
+                              size="sm" 
+                              className="h-6 px-2 text-rose-600 hover:bg-rose-50 text-[11px] font-bold"
                               onClick={() => removeMed(index)}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
                             </Button>
                           )}
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        {/* Row 1: Medicine Name & Generic (With Datalist Autocomplete) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div className="sm:col-span-2">
-                            <Label className="text-[11px]">Medicine Name & Generic</Label>
+                            <Label className="text-[11px] font-bold text-stone-700 dark:text-stone-300">
+                              Medicine Name & Generic Formula <span className="text-teal-600">(Auto-Suggest Active)</span>
+                            </Label>
                             <Input 
-                              placeholder="e.g. Paracetamol 650mg / Atorvastatin 20mg" 
-                              className="h-8 text-xs font-medium"
+                              list="universal-drugs-list"
+                              placeholder="Type or select: e.g. Paracetamol 650mg, Augmentin 625, Pantoprazole 40mg..." 
+                              className="h-9 text-xs font-semibold mt-1 bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
                               {...prescriptionForm.register(`medicines.${index}.medicineName` as const)}
+                              onChange={(e) => handleDrugNameChange(index, e.target.value)}
                               readOnly={isCompleted}
                             />
                           </div>
+
                           <div>
-                            <Label className="text-[11px]">Dosage / Strength</Label>
+                            <Label className="text-[11px] font-bold text-stone-700 dark:text-stone-300">
+                              Dosage / Strength
+                            </Label>
                             <Input 
-                              placeholder="e.g. 500mg, 1 tab" 
-                              className="h-8 text-xs"
+                              list="universal-dosage-list"
+                              placeholder="e.g. 650 mg, 500 mg, 5 ml..." 
+                              className="h-9 text-xs font-semibold mt-1 bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
                               {...prescriptionForm.register(`medicines.${index}.dosage` as const)}
                               readOnly={isCompleted}
                             />
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        {/* Row 2: Frequency, Duration, Special Instructions */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
-                            <Label className="text-[11px]">Frequency (Pattern)</Label>
+                            <Label className="text-[11px] font-bold text-stone-700 dark:text-stone-300">
+                              Frequency (Clinical Pattern)
+                            </Label>
                             <Input 
-                              placeholder="e.g. 1-0-1 (Morning-Night)" 
-                              className="h-8 text-xs font-mono"
+                              list="universal-frequency-list"
+                              placeholder="e.g. 1-0-1 (Morning & Night)..." 
+                              className="h-9 text-xs font-mono font-medium mt-1 bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
                               {...prescriptionForm.register(`medicines.${index}.frequency` as const)}
                               readOnly={isCompleted}
                             />
                           </div>
+
                           <div>
-                            <Label className="text-[11px]">Duration</Label>
+                            <Label className="text-[11px] font-bold text-stone-700 dark:text-stone-300">
+                              Duration
+                            </Label>
                             <Input 
-                              placeholder="e.g. 5 days, 1 month" 
-                              className="h-8 text-xs font-mono"
+                              list="universal-duration-list"
+                              placeholder="e.g. 5 Days (Standard Course)..." 
+                              className="h-9 text-xs font-medium mt-1 bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
                               {...prescriptionForm.register(`medicines.${index}.duration` as const)}
                               readOnly={isCompleted}
                             />
                           </div>
+
                           <div>
-                            <Label className="text-[11px]">Special Instructions</Label>
+                            <Label className="text-[11px] font-bold text-stone-700 dark:text-stone-300">
+                              Special Instructions
+                            </Label>
                             <Input 
-                              placeholder="e.g. After meals" 
-                              className="h-8 text-xs"
+                              list="universal-instructions-list"
+                              placeholder="e.g. Take after meals with plenty of water..." 
+                              className="h-9 text-xs font-medium mt-1 bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
                               {...prescriptionForm.register(`medicines.${index}.instructions` as const)}
                               readOnly={isCompleted}
                             />
@@ -506,27 +655,30 @@ export default function ConsultationView() {
                     ))}
 
                     {medFields.length === 0 && (
-                      <div className="p-8 border border-dashed rounded-xl text-center text-xs text-muted-foreground space-y-2">
+                      <div className="p-8 border border-dashed rounded-2xl text-center text-xs text-muted-foreground space-y-2.5 bg-stone-50/40">
+                        <Pill className="w-8 h-8 mx-auto text-teal-600/40" />
                         <div>No medications added to this prescription yet.</div>
                         <Button 
                           type="button" 
                           variant="outline" 
                           size="sm"
-                          onClick={() => appendMed({ medicineName: '', dosage: '', frequency: '', duration: '', instructions: '' })}
-                          className="text-xs"
+                          onClick={() => appendMed({ medicineName: '', dosage: '500 mg', frequency: '1-0-1', duration: '5 Days', instructions: 'After meals' })}
+                          className="text-xs font-bold gap-1 border-teal-600 text-teal-700"
                         >
-                          <Plus className="w-3.5 h-3.5 mr-1" /> Add First Medicine
+                          <Plus className="w-3.5 h-3.5" /> Add First Medicine
                         </Button>
                       </div>
                     )}
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="rxNotes" className="text-xs">Clinical Advice & Follow-Up Instructions</Label>
+                  <div className="space-y-1.5 pt-2">
+                    <Label htmlFor="rxNotes" className="text-xs font-bold text-stone-800 dark:text-stone-200">
+                      Doctor's Clinical Advice & Follow-Up Instructions
+                    </Label>
                     <Textarea 
                       id="rxNotes" 
-                      placeholder="e.g. Low sodium diet, 30 min daily walking, review with lab reports in 7 days..." 
-                      className="min-h-[85px] text-xs leading-relaxed"
+                      placeholder="e.g. Low sodium diet, 30 min brisk walking daily, maintain hydration, review with FBS/PPBS reports after 7 days..." 
+                      className="min-h-[90px] text-xs font-medium leading-relaxed bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
                       {...prescriptionForm.register('notes')} 
                       readOnly={isCompleted}
                     />
@@ -545,7 +697,7 @@ export default function ConsultationView() {
             <div className="flex items-center gap-2 pl-2">
               <span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-pulse" />
               <span className="text-xs font-semibold text-stone-300">
-                Active Token <strong className="text-teal-400 font-mono font-bold text-sm">#{appointment.tokenNumber}</strong>
+                Active Token <strong className="text-teal-400 font-mono font-bold text-sm">#{appointment.tokenNumber}</strong> ({patientFullName})
               </span>
             </div>
 
@@ -563,7 +715,7 @@ export default function ConsultationView() {
               <Button 
                 onClick={handleSignAndCallNext} 
                 disabled={isProcessingAction || completeAndCallNextMutation.isPending}
-                className="bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs gap-2 h-9 px-4 shadow-lg"
+                className="bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs gap-2 h-9 px-4 shadow-lg cursor-pointer"
               >
                 {isProcessingAction ? (
                   <>
@@ -572,9 +724,9 @@ export default function ConsultationView() {
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4 text-amber-300" />
-                    ⚡ Sign & Call Next Patient
-                    <ArrowRight className="w-4 h-4" />
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>⚡ Sign & Call Next</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </>
                 )}
               </Button>

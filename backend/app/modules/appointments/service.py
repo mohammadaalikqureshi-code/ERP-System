@@ -132,7 +132,14 @@ class AppointmentService:
         await manager.broadcast(public_room_for_clinic(clinic_id), build(Events.QUEUE_UPDATED))
 
     async def get_appointment(self, clinic_id: uuid.UUID, appointment_id: uuid.UUID):
-        stmt = select(Appointment).where(Appointment.id == appointment_id, Appointment.clinic_id == clinic_id)
+        stmt = (
+            select(Appointment)
+            .options(
+                selectinload(Appointment.patient),
+                selectinload(Appointment.doctor).selectinload(Doctor.user),
+            )
+            .where(Appointment.id == appointment_id, Appointment.clinic_id == clinic_id)
+        )
         result = await self.db.execute(stmt)
         app = result.scalar_one_or_none()
         if not app:
