@@ -377,9 +377,19 @@ const AppointmentBookingContent = () => {
             /* PRINTABLE THERMAL TOKEN SLIP CARD */
             <div className="max-w-md mx-auto space-y-4 animate-in zoom-in-95">
               <Card className="border-2 border-teal-600/60 shadow-2xl bg-card overflow-hidden">
-                <div className="bg-teal-600 p-4 text-white text-center space-y-1">
+                <div className={`p-4 text-white text-center space-y-1 ${
+                  (generatedSlip.isEmergency || generatedSlip.is_emergency) ? 'bg-red-600' : 'bg-teal-600'
+                }`}>
                   <div className="text-xs uppercase tracking-widest font-bold opacity-90">Sanjeevani Multi-Specialty Hospital</div>
-                  <div className="text-sm font-semibold">OPD Patient Token Receipt</div>
+                  <div className="text-sm font-semibold">
+                    {(generatedSlip.isEmergency || generatedSlip.is_emergency) ? '🚨 CRITICAL EMERGENCY TOKEN' : 'OPD Patient Token Receipt'}
+                  </div>
+                  {(generatedSlip.isEmergency || generatedSlip.is_emergency) && (
+                    <div className="mt-2 py-1 px-2.5 rounded-lg bg-black/40 text-amber-300 font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Priority 1: Continuous Voice Calling Active on TV Board
+                    </div>
+                  )}
                   {(generatedSlip.isDuplicatePrevented || generatedSlip.is_duplicate_prevented) && (
                     <div className="mt-2 py-1 px-2.5 rounded-lg bg-amber-400 text-stone-950 font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm">
                       <AlertTriangle className="w-3.5 h-3.5" />

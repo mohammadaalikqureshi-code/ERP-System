@@ -551,7 +551,7 @@ class AppointmentService:
         dept = data.department or doctor.department or "General OPD"
         doc_full_name = doctor.user.full_name if doctor.user else "Doctor"
 
-        # 3. 🚨 STRICT GUARD: Check if patient ALREADY has an active token for this doctor today
+        # 3. Check if patient ALREADY has an active token for this doctor today
         existing_apt = (await self.db.execute(
             select(Appointment).where(
                 Appointment.clinic_id == clinic_id,
@@ -562,6 +562,92 @@ class AppointmentService:
             ).order_by(Appointment.queue_number)
         )).scalar_one_or_none()
 
+        # IF IT IS EMERGENCY: Allow generating or upgrading token to EMERGENCY priority
+        if data.is_emergency:
+            if existing_apt:
+                existing_apt.visit_type = "emergency"
+                if not existing_apt.token_number.startswith("EMG"):
+                    existing_apt.token_number = f"EMG-{existing_apt.queue_number:02d}"
+                existing_apt.status = "checked_in"
+                await self.db.commit()
+                await self.db.refresh(existing_apt)
+                appointment = existing_apt
+            else:
+                queue_num = await self._generate_queue_number(doctor.id, today)
+                token_number = f"EMG-{queue_num:02d}"
+                now = datetime.now(timezone.utc)
+                appointment = Appointment(
+                    clinic_id=clinic_id,
+                    patient_id=patient.id,
+                    doctor_id=doctor.id,
+                    department=dept,
+                    visit_type="emergency",
+                    appointment_date=today,
+                    appointment_time=now.time(),
+                    token_number=token_number,
+                    queue_number=queue_num,
+                    status="checked_in",
+                    booked_by=user_id,
+                    checked_in_at=now,
+                    notes=data.notes or "🚨 EMERGENCY CASE - PRIORITY ATTENTION REQUIRED"
+                )
+                self.db.add(appointment)
+                await self.db.commit()
+                await self.db.refresh(appointment)
+
+            # High Priority Broadcast to TV Screen & Doctor Cabin
+            await self._announce(clinic_id, Events.APPOINTMENT_CREATED, appointment.id, token_number=appointment.token_number, is_emergency=True)
+            await self._announce(clinic_id, Events.APPOINTMENT_STATUS_CHANGED, appointment.id, status="checked_in", tokenNumber=appointment.token_number, is_emergency=True)
+
+            try:
+                from app.modules.notifications.service import NotificationService
+                await NotificationService(self.db).create_and_broadcast(
+                    clinic_id=clinic_id,
+                    title="🚨 CRITICAL EMERGENCY PATIENT ARRIVED",
+                    message=f"Emergency Token #{appointment.token_number} ({patient.full_name}) routed to Dr. {doc_full_name} ({dept}). Please attend immediately!",
+                    category="emergency",
+                    target_role="doctor",
+                    sender_name="Front Desk Reception",
+                    link="/doctor",
+                )
+            except Exception:
+                logger.warning("Failed to broadcast emergency notification", exc_info=True)
+
+            return {
+                "id": str(appointment.id),
+                "token_number": appointment.token_number,
+                "queue_number": appointment.queue_number,
+                "status": appointment.status,
+                "appointment_date": str(appointment.appointment_date),
+                "appointment_time": str(appointment.appointment_time)[:5],
+                "is_emergency": True,
+                "patient": {
+                    "id": str(patient.id),
+                    "patient_code": patient.patient_code,
+                    "full_name": patient.full_name,
+                    "mobile": patient.mobile,
+                    "age": patient.age,
+                    "gender": patient.gender,
+                    "blood_group": patient.blood_group,
+                    "is_new": is_new_patient
+                },
+                "doctor": {
+                    "id": str(doctor.id),
+                    "full_name": doc_full_name,
+                    "department": doctor.department,
+                    "specialization": doctor.specialization,
+                    "consultation_fee": float(doctor.consultation_fee) if doctor.consultation_fee else 500.0,
+                    "room": "Room 101"
+                },
+                "queue_stats": {
+                    "patients_ahead": 0,
+                    "estimated_wait_minutes": 0,
+                    "estimated_wait_formatted": "🚨 IMMEDIATE PRIORITY (0 Mins)"
+                },
+                "message": f"🚨 Emergency Token #{appointment.token_number} generated for {patient.full_name}! High-priority audio and TV alerts dispatched."
+            }
+
+        # REGULAR NON-EMERGENCY: Block duplicate token generation if active token already exists
         if existing_apt:
             # Calculate wait time for the existing active token
             patients_ahead_count = (await self.db.execute(
@@ -584,6 +670,7 @@ class AppointmentService:
                 "appointment_date": str(existing_apt.appointment_date),
                 "appointment_time": str(existing_apt.appointment_time)[:5],
                 "is_duplicate_prevented": True,
+                "is_emergency": False,
                 "patient": {
                     "id": str(patient.id),
                     "patient_code": patient.patient_code,
@@ -610,9 +697,9 @@ class AppointmentService:
                 "message": f"Active Token #{existing_apt.token_number} already exists today for {patient.full_name} with Dr. {doc_full_name} (Status: {existing_apt.status.replace('_', ' ').title()}). Duplicate generation blocked."
             }
 
-        # 4. Calculate queue & generate new token
+        # 4. Calculate queue & generate new regular token
         queue_num = await self._generate_queue_number(doctor.id, today)
-        token_prefix = "EMG" if data.is_emergency else "A"
+        token_prefix = "A"
         token_number = f"{token_prefix}-{queue_num:03d}"
         now = datetime.now(timezone.utc)
 
@@ -621,7 +708,7 @@ class AppointmentService:
             patient_id=patient.id,
             doctor_id=doctor.id,
             department=dept,
-            visit_type="emergency" if data.is_emergency else data.visit_type,
+            visit_type=data.visit_type or "new",
             appointment_date=today,
             appointment_time=now.time(),
             token_number=token_number,

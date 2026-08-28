@@ -78,7 +78,10 @@ async def public_queue(
 
     statement = (
         select(Appointment)
-        .options(selectinload(Appointment.doctor).selectinload(Doctor.user))
+        .options(
+            selectinload(Appointment.doctor).selectinload(Doctor.user),
+            selectinload(Appointment.patient)
+        )
         .where(
             Appointment.clinic_id == clinic_id,
             Appointment.appointment_date == date.today(),
@@ -98,18 +101,59 @@ async def public_queue(
     current = next((a for a in appointments if a.status == "in_consultation"), None)
     waiting = [a for a in appointments if a.status in IN_QUEUE]
 
+    # Prioritize emergency tokens to the very top of the waiting queue
+    waiting.sort(
+        key=lambda a: (
+            0 if (a.visit_type == "emergency" or a.token_number.startswith("EMG")) else 1,
+            a.queue_number,
+        )
+    )
+
+    # Detect any active emergency patient waiting to reach doctor cabin
+    emergency_waiting = next(
+        (
+            a
+            for a in waiting
+            if (a.visit_type == "emergency" or a.token_number.startswith("EMG"))
+            and a.status == "checked_in"
+        ),
+        None,
+    )
+
     return {
         "clinic_name": clinic.name,
         "current": (
             {
                 "token_number": current.token_number,
+                "patient_name": current.patient.full_name if current.patient else None,
                 "doctor_name": doctor_name(current),
                 "department": current.department,
+                "is_emergency": (current.visit_type == "emergency" or current.token_number.startswith("EMG")),
             }
             if current
             else None
         ),
-        "waiting": [{"token_number": a.token_number} for a in waiting[:10]],
+        "emergency": (
+            {
+                "token_number": emergency_waiting.token_number,
+                "patient_name": emergency_waiting.patient.full_name if emergency_waiting.patient else "Emergency Patient",
+                "doctor_name": doctor_name(emergency_waiting) or "Doctor OPD",
+                "department": emergency_waiting.department or "Emergency / OPD",
+                "status": emergency_waiting.status,
+            }
+            if emergency_waiting
+            else None
+        ),
+        "waiting": [
+            {
+                "token_number": a.token_number,
+                "patient_name": a.patient.full_name if a.patient else None,
+                "doctor_name": doctor_name(a),
+                "department": a.department,
+                "is_emergency": (a.visit_type == "emergency" or a.token_number.startswith("EMG")),
+            }
+            for a in waiting[:10]
+        ],
         "waiting_count": len(waiting),
         "completed_count": sum(1 for a in appointments if a.status == "completed"),
     }
