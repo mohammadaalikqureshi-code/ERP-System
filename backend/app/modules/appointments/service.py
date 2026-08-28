@@ -342,7 +342,14 @@ class AppointmentService:
             Appointment.appointment_date == today
         ).order_by(Appointment.queue_number, Appointment.appointment_time)
 
-        items = (await self.db.execute(stmt)).scalars().all()
+        items = list((await self.db.execute(stmt)).scalars().all())
+        # Sort Emergency appointments to the top of the doctor's queue
+        items.sort(
+            key=lambda a: (
+                0 if (a.visit_type == 'emergency' or a.token_number.startswith('EMG')) else 1,
+                a.queue_number
+            )
+        )
         return [self._format_appointment(item) for item in items]
 
     async def start_next_consultation(self, clinic_id: uuid.UUID, user_id: uuid.UUID, doctor_id: uuid.UUID = None):
@@ -379,7 +386,7 @@ class AppointmentService:
         if in_prog:
             return self._format_appointment(in_prog)
 
-        # 3. Look for next checked-in patient
+        # 3. Look for next checked-in patient (EMERGENCY FIRST)
         checked_in_stmt = select(Appointment).options(
             selectinload(Appointment.patient),
             selectinload(Appointment.doctor).selectinload(Doctor.user)
@@ -390,7 +397,15 @@ class AppointmentService:
             Appointment.status.in_(["checked_in", "CHECKED_IN"])
         ).order_by(Appointment.queue_number)
         
-        next_app = (await self.db.execute(checked_in_stmt)).scalars().first()
+        checked_in_apps = list((await self.db.execute(checked_in_stmt)).scalars().all())
+        # Prioritize emergency cases immediately
+        checked_in_apps.sort(
+            key=lambda a: (
+                0 if (a.visit_type == 'emergency' or a.token_number.startswith('EMG')) else 1,
+                a.queue_number
+            )
+        )
+        next_app = checked_in_apps[0] if checked_in_apps else None
 
         # 4. If none checked-in, look for booked/scheduled patient
         if not next_app:

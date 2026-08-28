@@ -15,6 +15,8 @@ import {
   AlertCircle,
   Calendar,
   Phone,
+  AlertTriangle,
+  Zap,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,7 +41,7 @@ export default function DoctorDashboard() {
   const { data: dashboard, isLoading: isLoadingDashboard } = useQuery({
     queryKey: ['doctorDashboard'],
     queryFn: () => api.get('/dashboard/doctor').then(res => res.data),
-    refetchInterval: 15000,
+    refetchInterval: 10000,
   });
 
   const { data: todayAppointments = [], isLoading: isLoadingAppointments, refetch: refetchAppts } = useDoctorTodayAppointments();
@@ -58,6 +60,11 @@ export default function DoctorDashboard() {
 
   const activeConsultation = todayAppointments.find(
     (a) => a.status === 'in_consultation' || a.status === 'IN_CONSULTATION'
+  );
+
+  const emergencyWaiting = todayAppointments.find(
+    (a) => (a.visitType === 'emergency' || a.tokenNumber?.startsWith('EMG')) && 
+           (a.status === 'checked_in' || a.status === 'CHECKED_IN')
   );
 
   const waitingAppointments = todayAppointments.filter(
@@ -89,12 +96,13 @@ export default function DoctorDashboard() {
       return;
     }
 
-    // 2. Call next patient via API
+    // 2. Call next patient via API (prioritizes Emergency)
     startNext(undefined, {
       onSuccess: (appointment: Appointment) => {
         toast({
           title: '🩺 Consultation Initiated',
           description: `Called Token ${appointment.tokenNumber} (${appointment.patient?.firstName || 'Patient'}) into Consultation Room.`,
+          variant: (appointment.visitType === 'emergency' || appointment.tokenNumber?.startsWith('EMG')) ? 'destructive' : 'success',
         });
         navigate(`/doctor/consultation/${appointment.id}`);
       },
@@ -109,25 +117,21 @@ export default function DoctorDashboard() {
   };
 
   const handleStartSpecificPatient = (appointment: Appointment) => {
-    if (appointment.status === 'in_consultation') {
-      navigate(`/doctor/consultation/${appointment.id}`);
-      return;
-    }
-
     updateStatus(
       { id: appointment.id, status: 'in_consultation' },
       {
         onSuccess: () => {
           toast({
-            title: 'Consultation Started',
-            description: `Calling Token ${appointment.tokenNumber} into consultation.`,
+            title: 'Consultation Room Started',
+            description: `Calling Token #${appointment.tokenNumber} (${appointment.patient?.firstName || 'Patient'}).`,
+            variant: (appointment.visitType === 'emergency' || appointment.tokenNumber?.startsWith('EMG')) ? 'destructive' : 'success',
           });
           navigate(`/doctor/consultation/${appointment.id}`);
         },
         onError: (err: any) => {
           toast({
-            title: 'Action Error',
-            description: err.message || 'Failed to start consultation',
+            title: 'Action Failed',
+            description: err.response?.data?.message || 'Failed to start consultation.',
             variant: 'destructive',
           });
         },
@@ -135,47 +139,80 @@ export default function DoctorDashboard() {
     );
   };
 
-  const totalAppointments = Object.values(dashboard?.todayAppointments || {}).reduce(
-    (a, b) => (a as number) + (b as number),
-    0
-  );
-  const completed = dashboard?.todayAppointments?.completed || completedAppointments.length || 0;
-  const pending =
-    (dashboard?.todayAppointments?.booked || 0) +
-    (dashboard?.todayAppointments?.checkedIn || 0) ||
-    waitingAppointments.length;
+  const totalAppointments = dashboard?.todayAppointments || todayAppointments.length;
+  const completed = dashboard?.completedConsultations || completedAppointments.length;
+  const pending = dashboard?.waitingPatients || waitingAppointments.length;
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-stone-950 p-6 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm">
+    <div className="space-y-6 pb-12 max-w-7xl mx-auto">
+      {/* 🚨 HIGH PRIORITY EMERGENCY BANNER (If Emergency Patient Waiting for this doctor) */}
+      {emergencyWaiting && (
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white shadow-xl border-2 border-white animate-pulse flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 bg-white text-red-600 rounded-xl font-bold text-lg animate-bounce">
+              🚨
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-black/40 text-amber-300 font-mono font-black text-xs uppercase tracking-widest border border-amber-400">
+                  Critical Emergency Patient
+                </span>
+                <span className="text-xs font-bold text-white uppercase">Waiting in Lobby Now</span>
+              </div>
+              <h3 className="text-xl font-black text-white mt-1">
+                {emergencyWaiting.patient?.firstName} {emergencyWaiting.patient?.lastName} • Token #{emergencyWaiting.tokenNumber}
+              </h3>
+              <p className="text-xs text-red-100 opacity-95">
+                Priority case registered at {emergencyWaiting.appointmentTime}. TV Screen voice calling is active.
+              </p>
+            </div>
+          </div>
+
+          <Button
+            onClick={() => handleStartSpecificPatient(emergencyWaiting)}
+            className="bg-white text-red-700 hover:bg-amber-100 font-black gap-2 shadow-2xl h-11 px-5 text-sm shrink-0"
+          >
+            <Zap className="w-4 h-4 fill-current text-red-600" />
+            <span>⚡ Call Emergency Patient Now</span>
+          </Button>
+        </div>
+      )}
+
+      {/* Top Welcome Bar & Action Hub */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-teal-900 via-teal-800 to-stone-900 text-white p-6 rounded-2xl shadow-lg border border-teal-700/50">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-extrabold text-stone-900 dark:text-white tracking-tight">
-              Doctor OPD Console
-            </h1>
-            <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/50 dark:text-teal-400">
-              Live Queue
-            </Badge>
+            <span className="px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-semibold text-xs border border-teal-500/30">
+              Doctor OPD Suite • Active
+            </span>
           </div>
-          <p className="text-sm text-stone-500 mt-1">
-            Welcome back, <strong className="text-stone-800 dark:text-stone-200">{user?.fullName || 'Doctor'}</strong>. Manage your OPD queue and consultations.
+          <h1 className="text-2xl sm:text-3xl font-extrabold mt-1.5 tracking-tight text-white">
+            Welcome, Dr. {user?.fullName || 'Doctor'}
+          </h1>
+          <p className="text-sm text-teal-200 mt-1 opacity-90">
+            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            {' • '}
+            <span className="font-semibold text-white">{waitingAppointments.length} Patients in Queue</span>
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => navigate('/reports')}
+            className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs font-semibold gap-1.5 h-10"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Patient Reports</span>
+          </Button>
+
           <Button
             onClick={handleStartNextConsultation}
             disabled={isStartingNext}
-            size="lg"
-            className="bg-teal-600 hover:bg-teal-700 text-white font-semibold shadow-md shadow-teal-600/20 gap-2 h-11 px-5"
+            className="bg-teal-500 hover:bg-teal-400 text-stone-950 font-extrabold gap-2 shadow-lg h-10 px-5 text-sm"
           >
-            <Stethoscope className="w-5 h-5 animate-pulse" />
-            {activeConsultation
-              ? `Resume Consultation (${activeConsultation.tokenNumber})`
-              : isStartingNext
-              ? 'Calling Next Patient...'
-              : 'Start Next Consultation'}
+            <Play className="w-4 h-4 fill-current" />
+            <span>{activeConsultation ? 'Resume Consultation' : 'Call Next Patient'}</span>
           </Button>
         </div>
       </div>
@@ -279,24 +316,18 @@ export default function DoctorDashboard() {
             <div>
               <CardTitle className="text-lg font-bold text-stone-900 dark:text-white flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-teal-600" />
-                Today's Patient Consultation Queue
+                <span>Today's Patient Consultation Queue</span>
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs text-stone-500 mt-1">
                 Live list of scheduled, checked-in, and completed visits for today.
               </CardDescription>
             </div>
 
-            <Tabs value={filterTab} onValueChange={(v) => setFilterTab(v as any)}>
-              <TabsList className="bg-stone-200/70 dark:bg-stone-800 p-0.5">
-                <TabsTrigger value="all" className="text-xs">
-                  All ({todayAppointments.length})
-                </TabsTrigger>
-                <TabsTrigger value="waiting" className="text-xs">
-                  Waiting ({waitingAppointments.length + (activeConsultation ? 1 : 0)})
-                </TabsTrigger>
-                <TabsTrigger value="completed" className="text-xs">
-                  Completed ({completedAppointments.length})
-                </TabsTrigger>
+            <Tabs value={filterTab} onValueChange={(v) => setFilterTab(v as any)} className="w-full sm:w-auto">
+              <TabsList className="grid grid-cols-3 w-full sm:w-auto bg-stone-200/60 dark:bg-stone-800 p-1">
+                <TabsTrigger value="all" className="text-xs">All ({todayAppointments.length})</TabsTrigger>
+                <TabsTrigger value="waiting" className="text-xs">Waiting ({waitingAppointments.length})</TabsTrigger>
+                <TabsTrigger value="completed" className="text-xs">Completed ({completedAppointments.length})</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -328,22 +359,32 @@ export default function DoctorDashboard() {
                 const isActive = apt.status === 'in_consultation' || apt.status === 'IN_CONSULTATION';
                 const isCheckedIn = apt.status === 'checked_in' || apt.status === 'CHECKED_IN';
                 const isCompleted = apt.status === 'completed' || apt.status === 'COMPLETED';
+                const isEmergency = apt.visitType === 'emergency' || apt.tokenNumber?.startsWith('EMG');
 
                 return (
                   <div
                     key={apt.id}
                     className={cn(
                       'p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors',
-                      isActive
+                      isEmergency && isCheckedIn
+                        ? 'bg-red-50/80 dark:bg-red-950/40 border-l-4 border-l-red-600 animate-pulse'
+                        : isActive
                         ? 'bg-teal-50/40 dark:bg-teal-950/30 border-l-4 border-l-teal-600'
                         : 'hover:bg-stone-50/80 dark:hover:bg-stone-900/40'
                     )}
                   >
                     {/* Patient Details */}
                     <div className="flex items-start sm:items-center gap-3.5">
-                      <div className="flex flex-col items-center justify-center w-14 h-14 rounded-xl bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex-shrink-0">
-                        <span className="text-[10px] font-bold text-stone-400 uppercase">Token</span>
-                        <span className="text-base font-black text-teal-700 dark:text-teal-400">
+                      <div className={cn(
+                        "flex flex-col items-center justify-center w-14 h-14 rounded-xl border flex-shrink-0",
+                        isEmergency 
+                          ? "bg-red-600 text-white border-red-500 shadow-md"
+                          : "bg-stone-100 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
+                      )}>
+                        <span className={cn("text-[10px] font-bold uppercase", isEmergency ? "text-amber-200" : "text-stone-400")}>
+                          {isEmergency ? "EMG" : "Token"}
+                        </span>
+                        <span className={cn("text-base font-black font-mono", isEmergency ? "text-white" : "text-teal-700 dark:text-teal-400")}>
                           {apt.tokenNumber || `#${apt.queueNumber}`}
                         </span>
                       </div>
@@ -354,11 +395,15 @@ export default function DoctorDashboard() {
                             {apt.patient?.firstName || 'Patient'} {apt.patient?.lastName || ''}
                           </h4>
                           <StatusBadge status={apt.status} />
-                          {apt.visitType && (
+                          {isEmergency ? (
+                            <Badge variant="destructive" className="text-[10px] px-2 py-0.5 font-bold uppercase tracking-wider bg-red-600">
+                              🚨 Emergency Priority
+                            </Badge>
+                          ) : apt.visitType ? (
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                               {apt.visitType}
                             </Badge>
-                          )}
+                          ) : null}
                         </div>
 
                         <div className="flex items-center gap-3 text-xs text-stone-500 flex-wrap">
@@ -376,7 +421,7 @@ export default function DoctorDashboard() {
                             </span>
                           )}
                           {apt.notes && (
-                            <span className="italic text-stone-400 max-w-xs truncate">
+                            <span className={cn("italic max-w-xs truncate font-medium", isEmergency ? "text-red-700 dark:text-red-300" : "text-stone-400")}>
                               "{apt.notes}"
                             </span>
                           )}
@@ -409,15 +454,17 @@ export default function DoctorDashboard() {
                         <Button
                           onClick={() => handleStartSpecificPatient(apt)}
                           className={cn(
-                            'font-semibold gap-1.5 shadow-sm',
-                            isCheckedIn
+                            'font-bold gap-1.5 shadow-sm',
+                            isEmergency
+                              ? 'bg-red-600 hover:bg-red-700 text-white'
+                              : isCheckedIn
                               ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                               : 'bg-stone-800 hover:bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-900'
                           )}
                           size="sm"
                         >
                           <Play className="w-3.5 h-3.5 fill-current" />
-                          <span>{isCheckedIn ? 'Call Patient' : 'Start Consultation'}</span>
+                          <span>{isEmergency ? '⚡ Call Emergency Patient' : isCheckedIn ? 'Call Patient' : 'Start Consultation'}</span>
                         </Button>
                       )}
                     </div>
@@ -431,4 +478,3 @@ export default function DoctorDashboard() {
     </div>
   );
 }
-
