@@ -24,6 +24,12 @@ import {
   UNIVERSAL_DOSAGE_OPTIONS, 
   UNIVERSAL_DURATION_OPTIONS, 
   UNIVERSAL_INSTRUCTIONS_OPTIONS,
+  UNIVERSAL_BP_OPTIONS,
+  UNIVERSAL_HEART_RATE_OPTIONS,
+  UNIVERSAL_TEMP_OPTIONS,
+  UNIVERSAL_SPO2_OPTIONS,
+  UNIVERSAL_WEIGHT_OPTIONS,
+  UNIVERSAL_HEIGHT_OPTIONS,
   DrugInfo
 } from '@/data/drugDatabase';
 
@@ -655,40 +661,82 @@ export default function ConsultationView() {
                 <div className="p-4 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
               ) : (
                 <form className="space-y-3.5 text-xs">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="bp" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Blood Pressure</Label>
-                      <Input id="bp" placeholder="e.g. 120/80 mmHg" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('bloodPressure')} />
-                    </div>
-                    <div>
-                      <Label htmlFor="hr" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Heart Rate (BPM)</Label>
-                      <Input id="hr" type="number" placeholder="72" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('heartRate')} />
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <UpsideAutoSuggestInput
+                      label="Blood Pressure"
+                      sublabel="30+ Presets"
+                      value={vitalsForm.watch('bloodPressure') || ''}
+                      onChange={(val) => vitalsForm.setValue('bloodPressure', val.split(' ')[0], { shouldDirty: true })}
+                      options={UNIVERSAL_BP_OPTIONS}
+                      placeholder="e.g. 120/80 mmHg"
+                    />
+
+                    <UpsideAutoSuggestInput
+                      label="Heart Rate (BPM)"
+                      sublabel="25+ Presets"
+                      value={vitalsForm.watch('heartRate') ? String(vitalsForm.watch('heartRate')) : ''}
+                      onChange={(val) => {
+                        const num = parseInt(val.replace(/\D/g, ''), 10);
+                        vitalsForm.setValue('heartRate', isNaN(num) ? 0 : num, { shouldDirty: true });
+                      }}
+                      options={UNIVERSAL_HEART_RATE_OPTIONS}
+                      placeholder="e.g. 72 bpm"
+                    />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="temp" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Temp (°F)</Label>
-                      <Input id="temp" type="number" step="0.1" placeholder="98.6" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('temperature')} />
-                    </div>
-                    <div>
-                      <Label htmlFor="spo2" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">SpO2 (%)</Label>
-                      <Input id="spo2" type="number" placeholder="99" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('spo2')} />
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <UpsideAutoSuggestInput
+                      label="Temperature (°F)"
+                      sublabel="18+ Presets"
+                      value={vitalsForm.watch('temperature') ? String(vitalsForm.watch('temperature')) : ''}
+                      onChange={(val) => {
+                        const match = val.match(/\d+(\.\d+)?/);
+                        const num = match ? parseFloat(match[0]) : 0;
+                        vitalsForm.setValue('temperature', num, { shouldDirty: true });
+                      }}
+                      options={UNIVERSAL_TEMP_OPTIONS}
+                      placeholder="e.g. 98.6 °F"
+                    />
+
+                    <UpsideAutoSuggestInput
+                      label="SpO2 (%)"
+                      sublabel="13+ Presets"
+                      value={vitalsForm.watch('spo2') ? String(vitalsForm.watch('spo2')) : ''}
+                      onChange={(val) => {
+                        const num = parseInt(val.replace(/\D/g, ''), 10);
+                        vitalsForm.setValue('spo2', isNaN(num) ? 0 : num, { shouldDirty: true });
+                      }}
+                      options={UNIVERSAL_SPO2_OPTIONS}
+                      placeholder="e.g. 99%"
+                    />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-3 gap-2.5 items-end">
+                    <UpsideAutoSuggestInput
+                      label="Weight (kg)"
+                      value={vitalsForm.watch('weight') ? String(vitalsForm.watch('weight')) : ''}
+                      onChange={(val) => {
+                        const num = parseFloat(val.replace(/[^\d.]/g, ''));
+                        vitalsForm.setValue('weight', isNaN(num) ? 0 : num, { shouldDirty: true });
+                      }}
+                      options={UNIVERSAL_WEIGHT_OPTIONS}
+                      placeholder="70"
+                    />
+
+                    <UpsideAutoSuggestInput
+                      label="Height (cm)"
+                      value={vitalsForm.watch('height') ? String(vitalsForm.watch('height')) : ''}
+                      onChange={(val) => {
+                        const num = parseFloat(val.replace(/[^\d.]/g, ''));
+                        vitalsForm.setValue('height', isNaN(num) ? 0 : num, { shouldDirty: true });
+                      }}
+                      options={UNIVERSAL_HEIGHT_OPTIONS}
+                      placeholder="170"
+                    />
+
                     <div>
-                      <Label htmlFor="wt" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Weight (kg)</Label>
-                      <Input id="wt" type="number" step="0.5" placeholder="70" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('weight')} />
-                    </div>
-                    <div>
-                      <Label htmlFor="ht" className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Height (cm)</Label>
-                      <Input id="ht" type="number" placeholder="170" className="h-8 text-xs font-mono mt-1" {...vitalsForm.register('height')} />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">BMI</Label>
-                      <div className="h-8 flex items-center justify-center font-mono font-bold bg-stone-100 dark:bg-stone-800 text-teal-700 dark:text-teal-300 rounded border border-stone-200 dark:border-stone-700 text-xs mt-1">
+                      <Label className="text-[11px] font-bold text-stone-600 dark:text-stone-300">BMI</Label>
+                      <div className="h-9 flex items-center justify-center font-mono font-bold bg-stone-100 dark:bg-stone-800 text-teal-700 dark:text-teal-300 rounded-md border border-stone-300 dark:border-stone-700 text-xs mt-1.5 shadow-sm">
                         {bmi}
                       </div>
                     </div>

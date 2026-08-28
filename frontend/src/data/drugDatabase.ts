@@ -327,10 +327,122 @@ export const UNIVERSAL_INSTRUCTIONS_OPTIONS = [
   'Avoid waxing, laser, or chemical peels on skin treated with this medication.',
   'Women of childbearing age must use effective contraception during treatment.',
   'Contraindicated in pregnancy and lactation. Consult doctor immediately if pregnant.',
-  'Consult your doctor immediately if unexplained muscle pain, tenderness, or weakness develops.',
-  'Consult doctor if fever or sore throat persists beyond 3 days despite medication.',
-  'Review in OPD with latest lab investigation reports on scheduled follow-up date.',
 ];
+
+// =========================================================================
+// 5. UNIVERSAL CLINICAL VITALS PRESETS (40+ BP, HR, Temp, SpO2, Weight, Height)
+// =========================================================================
+export const UNIVERSAL_BP_OPTIONS = [
+  '120/80 mmHg (Normal / Optimal)',
+  '110/70 mmHg (Ideal Resting BP)',
+  '115/75 mmHg (Normal BP)',
+  '118/76 mmHg (Normal Optimal)',
+  '122/82 mmHg (Normal BP)',
+  '125/82 mmHg (Pre-hypertension / Borderline)',
+  '128/84 mmHg (Pre-hypertension)',
+  '130/85 mmHg (Elevated BP / Stage 1)',
+  '135/88 mmHg (Stage 1 Borderline)',
+  '140/90 mmHg (Stage 1 Hypertension)',
+  '145/92 mmHg (Stage 1 Moderate)',
+  '150/95 mmHg (Stage 2 Hypertension)',
+  '155/98 mmHg (Stage 2 Moderate)',
+  '160/100 mmHg (Stage 2 Severe HTN)',
+  '170/105 mmHg (Severe Hypertension)',
+  '180/110 mmHg (Hypertensive Crisis / Urgent)',
+  '190/115 mmHg (Hypertensive Emergency)',
+  '90/60 mmHg (Low BP / Hypotension)',
+  '95/65 mmHg (Mild Hypotension)',
+  '100/65 mmHg (Low Normal)',
+  '105/70 mmHg (Normal Low)',
+  '108/68 mmHg (Healthy Athlete BP)',
+  '112/72 mmHg (Normal Resting)',
+  '124/78 mmHg (Normal)',
+  '132/86 mmHg (Elevated)',
+  '138/88 mmHg (Stage 1)',
+  '148/94 mmHg (Stage 1-2)',
+  '158/98 mmHg (Stage 2)',
+  '165/102 mmHg (High HTN)',
+  '175/108 mmHg (Critical HTN)',
+];
+
+export const UNIVERSAL_HEART_RATE_OPTIONS = [
+  '72 bpm (Normal Resting Pulse)',
+  '60 bpm (Low Normal / Athlete)',
+  '64 bpm (Normal Pulse)',
+  '68 bpm (Normal Pulse)',
+  '70 bpm (Normal Pulse)',
+  '74 bpm (Normal Pulse)',
+  '76 bpm (Normal Pulse)',
+  '78 bpm (Normal Pulse)',
+  '80 bpm (Normal Pulse)',
+  '82 bpm (Normal Pulse)',
+  '84 bpm (Normal Pulse)',
+  '88 bpm (High Normal)',
+  '90 bpm (High Normal)',
+  '94 bpm (Borderline Fast)',
+  '98 bpm (Borderline Tachycardia)',
+  '100 bpm (Mild Tachycardia)',
+  '105 bpm (Sinus Tachycardia)',
+  '110 bpm (Tachycardia)',
+  '115 bpm (Tachycardia)',
+  '120 bpm (High Tachycardia)',
+  '125 bpm (Severe Tachycardia)',
+  '55 bpm (Sinus Bradycardia)',
+  '50 bpm (Bradycardia)',
+  '48 bpm (Low Heart Rate)',
+  '45 bpm (Severe Bradycardia)',
+];
+
+export const UNIVERSAL_TEMP_OPTIONS = [
+  '98.6 °F (Normal Body Temp / Afebrile)',
+  '98.4 °F (Normal Basal Temp)',
+  '98.0 °F (Normal)',
+  '97.8 °F (Normal)',
+  '97.5 °F (Mild Hypothermia / Low Normal)',
+  '98.8 °F (Normal)',
+  '99.0 °F (Low-Grade / Borderline)',
+  '99.2 °F (Low-Grade Fever)',
+  '99.5 °F (Mild Febrile)',
+  '99.8 °F (Mild Fever)',
+  '100.0 °F (Moderate Fever)',
+  '100.4 °F (Clinical Pyrexia / Fever)',
+  '101.0 °F (High Fever)',
+  '101.5 °F (High Fever)',
+  '102.0 °F (Very High Fever)',
+  '102.5 °F (High Pyrexia)',
+  '103.0 °F (Severe Pyrexia)',
+  '104.0 °F (Hyperpyrexia - Critical)',
+];
+
+export const UNIVERSAL_SPO2_OPTIONS = [
+  '99% (Optimal Room Air)',
+  '98% (Normal / Excellent)',
+  '97% (Normal Room Air)',
+  '96% (Normal Baseline)',
+  '95% (Acceptable Baseline)',
+  '94% (Mild Hypoxemia / Borderline)',
+  '93% (Hypoxemia - Oxygen Required)',
+  '92% (Moderate Hypoxemia)',
+  '91% (Moderate Desaturation)',
+  '90% (Significant Hypoxemia)',
+  '88% (Severe Hypoxemia / COPD Target)',
+  '85% (Critical Respiratory Distress)',
+  '100% (On Oxygen Therapy / 2L Room Air)',
+];
+
+export const UNIVERSAL_WEIGHT_OPTIONS = [
+  '45 kg', '50 kg', '52 kg', '55 kg', '58 kg', '60 kg', '62 kg', '65 kg',
+  '68 kg', '70 kg', '72 kg', '75 kg', '78 kg', '80 kg', '82 kg', '85 kg',
+  '88 kg', '90 kg', '92 kg', '95 kg', '98 kg', '100 kg', '105 kg', '110 kg', '115 kg', '120 kg'
+];
+
+export const UNIVERSAL_HEIGHT_OPTIONS = [
+  '150 cm (4\'11")', '152 cm (5\'0")', '155 cm (5\'1")', '158 cm (5\'2")',
+  '160 cm (5\'3")', '162 cm (5\'4")', '165 cm (5\'5")', '168 cm (5\'6")',
+  '170 cm (5\'7")', '172 cm (5\'8")', '175 cm (5\'9")', '178 cm (5\'10")',
+  '180 cm (5\'11")', '183 cm (6\'0")', '185 cm (6\'1")', '188 cm (6\'2")', '190 cm (6\'3")'
+];
+
 
 // =========================================================================
 // 5. UNIVERSAL MEDICAL DRUG DATABASE (75+ Comprehensive Multi-Specialty Drugs)
