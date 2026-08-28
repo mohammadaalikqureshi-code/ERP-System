@@ -25,15 +25,15 @@ async def get_clinic_scope(
         except ValueError:
             pass
 
-    # 3. Fallback: Lookup first active clinic from DB
-    stmt = select(Clinic).where(Clinic.is_active == True).limit(1)
+    # 3. Fallback: Lookup primary active clinic from DB
+    stmt = select(Clinic).where(Clinic.is_active == True).order_by(Clinic.created_at.asc()).limit(1)
     result = await db.execute(stmt)
     clinic = result.scalar_one_or_none()
     if clinic:
         return clinic.id
 
     # Fallback to any clinic
-    stmt_any = select(Clinic).limit(1)
+    stmt_any = select(Clinic).order_by(Clinic.created_at.asc()).limit(1)
     clinic_any = (await db.execute(stmt_any)).scalar_one_or_none()
     if clinic_any:
         return clinic_any.id
