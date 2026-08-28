@@ -79,8 +79,14 @@ export const LoginPage: React.FC = () => {
   }, [setValue]);
 
   const DEMO_ACCOUNTS = [
-    { label: 'Clinic Admin', email: 'neha.kulkarni@sanjeevanihospital.in', role: 'Hospital Admin' },
-    { label: 'Doctor OPD', email: 'meera.raghavan@sanjeevanihospital.in', role: 'Cardiologist' },
+    { label: 'Super Admin', email: 'admin@medicare-erp.in', role: 'Platform Super Admin' },
+    { label: 'Hospital Admin', email: 'neha.kulkarni@sanjeevanihospital.in', role: 'Clinic Administrator' },
+    { label: 'Dr. Meera Raghavan', email: 'meera.raghavan@sanjeevanihospital.in', role: 'Cardiology' },
+    { label: 'Dr. Fatima Sheikh', email: 'fatima.sheikh@sanjeevanihospital.in', role: 'Paediatrics' },
+    { label: 'Dr. Arjun Deshmukh', email: 'arjun.deshmukh@sanjeevanihospital.in', role: 'General Medicine' },
+    { label: 'Dr. Vikram Nair', email: 'vikram.nair@sanjeevanihospital.in', role: 'Orthopaedics' },
+    { label: 'Dr. Ananya Bose', email: 'ananya.bose@sanjeevanihospital.in', role: 'Dermatology' },
+    { label: 'Dr. Rohit Malhotra', email: 'rohit.malhotra@sanjeevanihospital.in', role: 'Gynaecology' },
     { label: 'Receptionist', email: 'priya.menon@sanjeevanihospital.in', role: 'Front Desk & Billing' },
     { label: 'Lab Tech', email: 'mohammad.aalikqureshi@sanjeevanihospital.in', role: 'Diagnostics Laboratory' },
     { label: 'Pharmacist', email: 'imran.qureshi@sanjeevanihospital.in', role: 'Pharmacy Inventory' },
