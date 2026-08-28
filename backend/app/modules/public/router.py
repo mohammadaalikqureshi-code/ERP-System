@@ -353,7 +353,7 @@ async def search_patient_reports(
             "hasCritical": has_critical,
             "testsCount": len(order.results),
             "results": results_data,
-            "pdfUrl": f"/api/v1/public/reports/lab/{order.id}/pdf",
+            "pdfUrl": f"/public/reports/lab/{order.id}/pdf",
         })
 
     # 4. Fetch Prescriptions with Medicines
@@ -391,7 +391,7 @@ async def search_patient_reports(
             "department": rx.doctor.department if rx.doctor else "General OPD",
             "notes": rx.notes or "",
             "medicines": medicines_data,
-            "pdfUrl": f"/api/v1/public/reports/prescription/{rx.id}/pdf",
+            "pdfUrl": f"/public/reports/prescription/{rx.id}/pdf",
         })
 
     # 5. Fetch Bills & Invoices
@@ -419,7 +419,7 @@ async def search_patient_reports(
             "totalAmount": float(b.total_amount or 0),
             "paymentMode": b.payment_mode or "CASH",
             "paymentStatus": b.payment_status or "PAID",
-            "pdfUrl": f"/api/v1/public/reports/bill/{b.id}/pdf",
+            "pdfUrl": f"/public/reports/bill/{b.id}/pdf",
         })
 
     # 6. Fetch Appointments / Visits
