@@ -5,8 +5,10 @@
  * so the same build can be pointed at any backend without code changes.
  */
 
-/** Base URL of the API. Defaults to a relative path so the Vite/Nginx proxy handles it. */
-export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const rawApiUrl = (import.meta.env.VITE_API_BASE_URL || '/api/v1').trim().replace(/\/+$/, '');
+export const API_BASE_URL: string = rawApiUrl.startsWith('http') && !rawApiUrl.includes('/api/v1')
+  ? `${rawApiUrl}/api/v1`
+  : rawApiUrl;
 
 /** Product name shown in the sidebar, login screen and page titles. */
 export const APP_NAME: string = import.meta.env.VITE_APP_NAME || 'MediCare ERP';
