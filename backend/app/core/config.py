@@ -206,9 +206,6 @@ class Settings(BaseSettings):
         if self.DEBUG:
             problems.append("DEBUG must be False in production")
 
-        if "*" in self.cors_origins:
-            problems.append("ALLOWED_ORIGINS must list explicit origins, not '*'")
-
         if problems:
             raise ValueError("Unsafe production configuration:\n  - " + "\n  - ".join(problems))
 
