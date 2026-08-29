@@ -1,11 +1,11 @@
-databases:
-  - name: medicare-db
-    databaseName: clinic_erp
-    user: postgres
-    plan: free
-    region: singapore
+# ==============================================================================
+# 🚀 Render Blueprint Specification — MediCare Hospital ERP (100% Free Compatible)
+# ==============================================================================
 
 services:
+  # ----------------------------------------------------------------------------
+  # ⚙️ FASTAPI BACKEND API WEB SERVICE (FREE TIER)
+  # ----------------------------------------------------------------------------
   - type: web
     name: medicare-erp-api
     runtime: python
@@ -16,9 +16,7 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: medicare-db
-          property: connectionString
+        sync: false
       - key: ENVIRONMENT
         value: production
       - key: DEBUG
@@ -36,6 +34,9 @@ services:
       - key: COOKIE_SAMESITE
         value: 'none'
 
+  # ----------------------------------------------------------------------------
+  # 🌐 REACT + VITE FRONTEND STATIC SITE (FREE TIER)
+  # ----------------------------------------------------------------------------
   - type: web
     name: medicare-erp-web
     runtime: static
