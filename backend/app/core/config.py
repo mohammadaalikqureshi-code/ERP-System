@@ -9,7 +9,7 @@ here or in the environment.
 from functools import lru_cache
 from typing import List, Literal
 
-from pydantic import computed_field, model_validator
+from pydantic import computed_field, model_validator, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Placeholder values that ship in `.env.example`. The app refuses to start in
@@ -58,6 +58,16 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "postgres"
     POSTGRES_PORT: int = 5432
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@postgres:5432/clinic_erp"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def assemble_db_connection(cls, v: str) -> str:
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                return v.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
+                return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
