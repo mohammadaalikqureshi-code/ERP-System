@@ -5,10 +5,33 @@
  * so the same build can be pointed at any backend without code changes.
  */
 
-const rawApiUrl = (import.meta.env.VITE_API_BASE_URL || '/api/v1').trim().replace(/\/+$/, '');
-export const API_BASE_URL: string = rawApiUrl.startsWith('http') && !rawApiUrl.includes('/api/v1')
-  ? `${rawApiUrl}/api/v1`
-  : rawApiUrl;
+function resolveApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (envUrl) {
+    let formatted = envUrl.replace(/\/+$/, '');
+    if (!formatted.startsWith('http://') && !formatted.startsWith('https://') && !formatted.startsWith('/')) {
+      formatted = `https://${formatted}`;
+    }
+    if (!formatted.includes('/api/v1') && !formatted.endsWith('/api/v1')) {
+      formatted = `${formatted}/api/v1`;
+    }
+    return formatted;
+  }
+
+  // Automatic Cloud Domain resolution for Render & hosted environments
+  if (typeof window !== 'undefined' && window.location) {
+    const hostname = window.location.hostname;
+    // If hosted on Render (e.g. medicare-erp-web.onrender.com)
+    if (hostname.includes('.onrender.com')) {
+      const apiHost = hostname.replace(/-web(\.onrender\.com)$/, '-api$1');
+      return `https://${apiHost}/api/v1`;
+    }
+  }
+
+  return '/api/v1';
+}
+
+export const API_BASE_URL: string = resolveApiBaseUrl();
 
 /** Product name shown in the sidebar, login screen and page titles. */
 export const APP_NAME: string = import.meta.env.VITE_APP_NAME || 'MediCare ERP';
