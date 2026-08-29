@@ -48,8 +48,11 @@ def client_key(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+_redis_warning_logged = False
+
 async def _hit(redis: Redis, key: str, limit: int, window: int) -> tuple[bool, int]:
     """Count one request. Returns (allowed, seconds until the window resets)."""
+    global _redis_warning_logged
     bucket = int(time.time()) // window
     redis_key = f"ratelimit:{key}:{bucket}"
 
@@ -60,7 +63,9 @@ async def _hit(redis: Redis, key: str, limit: int, window: int) -> tuple[bool, i
             count, _ = await pipe.execute()
     except Exception:
         # Fail open: never block clinical work because Redis is down.
-        logger.warning("Rate limiter unavailable — allowing request", exc_info=True)
+        if not _redis_warning_logged:
+            logger.info("Rate limiter operating in passive fail-open mode (Redis not connected)")
+            _redis_warning_logged = True
         return True, 0
 
     reset_in = window - (int(time.time()) % window)

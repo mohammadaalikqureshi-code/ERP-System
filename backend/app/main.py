@@ -79,7 +79,7 @@ async def lifespan(app: FastAPI):
             logger.warning("Market-ready migration skipped", exc_info=True)
 
     if not await check_redis():
-        logger.error("Redis is not reachable at startup — /ready will report not-ready")
+        logger.info("Redis not connected — standalone single-instance mode active")
 
     yield
 
