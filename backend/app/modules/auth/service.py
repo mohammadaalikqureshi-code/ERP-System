@@ -32,31 +32,48 @@ class AuthService:
 
     async def generate_tokens(self, user: User) -> dict:
         family_id = str(uuid.uuid4())
+        role_name = user.role.name if user.role else "staff"
+        permissions = user.role.permissions if (user.role and user.role.permissions) else []
+        if isinstance(permissions, str):
+            try:
+                import json
+                permissions = json.loads(permissions)
+            except Exception:
+                permissions = []
+
+        clinic_id_str = str(user.clinic_id) if user.clinic_id else None
+
         extra_data = {
-            "role": user.role.name,
-            "role_name": user.role.name,
-            "clinic_id": str(user.clinic_id) if user.clinic_id else None
+            "role": role_name,
+            "role_name": role_name,
+            "clinic_id": clinic_id_str
         }
         access_token = create_access_token(str(user.id), extra_data)
         refresh_token = create_refresh_token(str(user.id), family_id)
         
-        # Store family ID in Redis to allow refresh
-        await self.redis.setex(f"refresh_family:{family_id}", settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400, str(user.id))
+        # Store family ID in Redis to allow refresh (or silently pass if redis not configured)
+        try:
+            await self.redis.setex(f"refresh_family:{family_id}", settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400, str(user.id))
+        except Exception:
+            pass
         
+        profile_data = {
+            "id": str(user.id),
+            "full_name": user.full_name or "",
+            "email": user.email,
+            "phone": user.phone or "",
+            "role": role_name,
+            "role_name": role_name,
+            "permissions": permissions if isinstance(permissions, list) else [],
+            "clinic_id": clinic_id_str
+        }
+
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
             "token_type": "bearer",
-            "profile": {
-                "id": str(user.id),
-                "full_name": user.full_name,
-                "email": user.email,
-                "phone": user.phone,
-                "role": user.role.name,
-                "role_name": user.role.name,
-                "permissions": user.role.permissions,
-                "clinic_id": str(user.clinic_id) if user.clinic_id else None
-            }
+            "profile": profile_data,
+            "user": profile_data
         }
 
     async def refresh_token(self, token: str) -> dict:

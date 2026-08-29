@@ -112,12 +112,16 @@ export const LoginPage: React.FC = () => {
         emailOrPhone: data.identifier,
         password: data.password,
       });
-      const { accessToken, profile } = response.data;
+      const resData = response.data || {};
+      const accessToken = resData.accessToken || resData.token || '';
+      const profile = resData.profile || resData.user || {};
+
       setAuth(profile, accessToken);
-      if (profile.clinicId) {
+      if (profile?.clinicId) {
         setClinicId(profile.clinicId);
       }
-      const target = ROLE_ROUTES[profile.role] || '/';
+      const role = profile?.role || 'staff';
+      const target = ROLE_ROUTES[role] || '/';
       navigate(target, { replace: true });
     } catch (error: any) {
       toast({

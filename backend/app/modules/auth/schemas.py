@@ -10,13 +10,13 @@ class LoginRequest(BaseModel):
 
 
 class UserProfile(BaseModel):
-    id: uuid.UUID
-    full_name: str
-    email: Optional[EmailStr] = None
-    phone: str
-    role: str
-    role_name: str
-    permissions: List[str] = []
+    id: Optional[uuid.UUID] = None
+    full_name: Optional[str] = ""
+    email: Optional[str] = None
+    phone: Optional[str] = ""
+    role: Optional[str] = "staff"
+    role_name: Optional[str] = "staff"
+    permissions: Optional[List[str]] = []
     clinic_id: Optional[uuid.UUID] = None
 
 
@@ -24,6 +24,7 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     profile: Optional[UserProfile] = None
+    user: Optional[UserProfile] = None
 
 
 class TokenResponse(BaseModel):
