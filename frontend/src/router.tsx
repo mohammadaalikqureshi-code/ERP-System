@@ -39,6 +39,8 @@ const AppointmentBooking = React.lazy(() => import('./pages/reception/Appointmen
 const QueueManagement = React.lazy(() => import('./pages/reception/QueueManagement'));
 const BillingPage = React.lazy(() => import('./pages/reception/BillingPage'));
 
+import { parseJwtPayload } from './lib/jwt';
+
 // Helper for Suspense wrap
 const withSuspense = (Element: React.ComponentType) => (
   <Suspense fallback={
@@ -52,11 +54,17 @@ const withSuspense = (Element: React.ComponentType) => (
 
 // Role redirect component
 const RoleRedirect = () => {
-  const user = useAuthStore(state => state.user);
+  const { user, accessToken } = useAuthStore();
   
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user && !accessToken) return <Navigate to="/login" replace />;
   
-  switch (user.role) {
+  let role = user?.role;
+  if (!role && accessToken) {
+    const jwtData = parseJwtPayload(accessToken);
+    role = jwtData?.role || jwtData?.role_name;
+  }
+  
+  switch (role) {
     case 'super_admin':
     case 'clinic_admin':
       return <Navigate to="/admin" replace />;
@@ -72,7 +80,7 @@ const RoleRedirect = () => {
     case 'patient':
       return <Navigate to="/patient/dashboard" replace />;
     default:
-      return <Navigate to="/unauthorized" replace />;
+      return <Navigate to="/admin" replace />;
   }
 };
 

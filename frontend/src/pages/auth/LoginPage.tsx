@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { useAuthStore } from '@/stores/authStore';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
+import { parseJwtPayload } from '@/lib/jwt';
 
 const loginSchema = z.object({
   identifier: z.string().min(1, 'Email or Phone is required'),
@@ -117,11 +118,18 @@ export const LoginPage: React.FC = () => {
       const profile = resData.profile || resData.user || {};
 
       setAuth(profile, accessToken);
+      
+      let role = profile?.role;
+      if (!role && accessToken) {
+        const jwtData = parseJwtPayload(accessToken);
+        role = jwtData?.role || jwtData?.role_name;
+      }
+
       if (profile?.clinicId) {
         setClinicId(profile.clinicId);
       }
-      const role = profile?.role || 'staff';
-      const target = ROLE_ROUTES[role] || '/';
+      
+      const target = (role && ROLE_ROUTES[role]) ? ROLE_ROUTES[role] : '/doctor';
       navigate(target, { replace: true });
     } catch (error: any) {
       toast({

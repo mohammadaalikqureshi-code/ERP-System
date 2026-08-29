@@ -2,13 +2,14 @@ import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { LoadingSpinner } from '../shared/LoadingSpinner';
+import { parseJwtPayload } from '@/lib/jwt';
 
 interface RouteGuardProps {
   allowedRoles?: string[];
 }
 
 export const RouteGuard: React.FC<RouteGuardProps> = ({ allowedRoles }) => {
-  const { isHydrated, isAuthenticated, user } = useAuthStore();
+  const { isHydrated, isAuthenticated, user, accessToken } = useAuthStore();
   const location = useLocation();
 
   if (!isHydrated) {
@@ -19,13 +20,19 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({ allowedRoles }) => {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !accessToken) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (allowedRoles && user) {
-    const isGlobalAdmin = user.role === 'super_admin' || user.role === 'clinic_admin';
-    if (!isGlobalAdmin && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && allowedRoles.length > 0) {
+    let role = user?.role;
+    if (!role && accessToken) {
+      const jwtData = parseJwtPayload(accessToken);
+      role = jwtData?.role || jwtData?.role_name;
+    }
+
+    const isGlobalAdmin = role === 'super_admin' || role === 'clinic_admin';
+    if (!isGlobalAdmin && (!role || !allowedRoles.includes(role))) {
       return <Navigate to="/unauthorized" replace />;
     }
   }

@@ -4,17 +4,27 @@ import { Shield, ArrowLeft, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/authStore';
 import { ROLE_ROUTES } from '@/lib/constants';
+import { parseJwtPayload } from '@/lib/jwt';
 
 export const UnauthorizedPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const { user, accessToken, logout } = useAuthStore();
+
+  let role = user?.role;
+  let displayName = user?.fullName || user?.email;
+  if (!role && accessToken) {
+    const jwtData = parseJwtPayload(accessToken);
+    role = jwtData?.role || jwtData?.role_name;
+    if (!displayName && jwtData?.sub) displayName = `User #${jwtData.sub.slice(0, 8)}`;
+  }
 
   const handleGoHome = () => {
-    if (!user) {
+    if (!role) {
+      logout();
       navigate('/login', { replace: true });
       return;
     }
-    const target = ROLE_ROUTES[user.role] || '/';
+    const target = ROLE_ROUTES[role] || '/';
     navigate(target, { replace: true });
   };
 
@@ -34,16 +44,16 @@ export const UnauthorizedPage: React.FC = () => {
           You do not have permission to view this section with your current role.
         </p>
         
-        {user && (
+        {displayName && (
           <div className="mb-6 p-3 rounded-lg bg-stone-100 dark:bg-stone-900 w-full text-xs text-stone-600 dark:text-stone-400">
-            Signed in as: <strong className="text-stone-900 dark:text-white capitalize">{user.fullName || user.email} ({user.role?.replace('_', ' ')})</strong>
+            Signed in as: <strong className="text-stone-900 dark:text-white capitalize">{displayName} {role ? `(${role.replace('_', ' ')})` : ''}</strong>
           </div>
         )}
 
         <div className="w-full space-y-2">
           <Button onClick={handleGoHome} className="w-full bg-teal-600 hover:bg-teal-700 text-white gap-2">
             <ArrowLeft className="w-4 h-4" />
-            Go to My Panel ({user?.role ? user.role.replace('_', ' ') : 'Home'})
+            Go to My Panel ({role ? role.replace('_', ' ') : 'Home'})
           </Button>
 
           <Button onClick={handleSwitchAccount} variant="outline" className="w-full gap-2 text-stone-600 dark:text-stone-300">
