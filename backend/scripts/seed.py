@@ -818,24 +818,28 @@ def print_credentials() -> None:
 
 
 async def main() -> None:
-    should_reset = "--reset" in sys.argv
+    try:
+        should_reset = "--reset" in sys.argv
 
-    async with AsyncSessionLocal() as db:
-        if should_reset:
-            await reset_demo_data(db)
+        async with AsyncSessionLocal() as db:
+            if should_reset:
+                await reset_demo_data(db)
 
-        role_map = await seed_roles(db)
-        clinics = await seed_clinics(db)
-        primary = clinics[0]
+            role_map = await seed_roles(db)
+            clinics = await seed_clinics(db)
+            primary = clinics[0]
 
-        await seed_panels(db, primary)
-        people = await seed_users(db, primary, role_map)
-        tests = await seed_catalogues(db, primary)
-        patients = await seed_patients(db, primary)
-        await seed_appointments(db, primary, people, patients, tests)
+            await seed_panels(db, primary)
+            people = await seed_users(db, primary, role_map)
+            tests = await seed_catalogues(db, primary)
+            patients = await seed_patients(db, primary)
+            await seed_appointments(db, primary, people, patients, tests)
 
-    print("\n[OK] Seeding complete.")
-    print_credentials()
+        print("\n[OK] Seeding complete.")
+        print_credentials()
+    except Exception as e:
+        print(f"\n[WARNING] Database seeding deferred: {e}")
+        print("💡 TIP: Verify that your Render DATABASE_URL is the full connection URL: postgresql://user:password@host/dbname")
 
 
 if __name__ == "__main__":
