@@ -24,8 +24,12 @@ from app.models.audit import AuditLog
 
 router = APIRouter(prefix="/admin/backup", tags=["System Backup & Disaster Recovery"])
 
-BACKUP_DIR = "/app/backups"
-os.makedirs(BACKUP_DIR, exist_ok=True)
+BACKUP_DIR = os.environ.get("BACKUP_DIR", "/app/backups")
+try:
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+except PermissionError:
+    BACKUP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backups")
+    os.makedirs(BACKUP_DIR, exist_ok=True)
 
 def verify_super_admin(current_user: User):
     if not current_user.role or current_user.role.name != "super_admin":

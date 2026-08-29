@@ -817,8 +817,35 @@ def print_credentials() -> None:
     print("=" * 68 + "\n")
 
 
+async def create_tables():
+    """Create all database tables if they don't exist (for fresh deployments)."""
+    from app.models.base import Base
+    from app.core.database import engine
+    # Import all models so they are registered with Base.metadata
+    import app.models.user
+    import app.models.clinic
+    import app.models.branch
+    import app.models.patient
+    import app.models.appointment
+    import app.models.doctor
+    import app.models.emr
+    import app.models.lab
+    import app.models.billing
+    import app.models.inventory
+    import app.models.audit
+    import app.models.notification
+    import app.models.system
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    print("[OK] Database tables created / verified.")
+
+
 async def main() -> None:
     try:
+        # Create tables first (idempotent — safe on existing databases)
+        await create_tables()
+
         should_reset = "--reset" in sys.argv
 
         async with AsyncSessionLocal() as db:
