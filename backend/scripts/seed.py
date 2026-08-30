@@ -174,6 +174,7 @@ STAFF = [
     {"name": "Priya Menon", "email": "priya.menon@sanjeevanihospital.in", "phone": "9810013001", "role": "receptionist"},
     {"name": "Sunita Yadav", "email": "sunita.yadav@sanjeevanihospital.in", "phone": "9810013002", "role": "nurse"},
     {"name": "Rakesh Kumar", "email": "rakesh.kumar@sanjeevanihospital.in", "phone": "9810013003", "role": "lab_staff"},
+    {"name": "Mohammad Aalik Qureshi", "email": "mohammad.aalikqureshi@sanjeevanihospital.in", "phone": "9810013009", "role": "lab_staff"},
     {"name": "Imran Qureshi", "email": "imran.qureshi@sanjeevanihospital.in", "phone": "9810013004", "role": "pharmacist"},
     {"name": "Neha Kulkarni", "email": "neha.kulkarni@sanjeevanihospital.in", "phone": "9810013005", "role": "clinic_admin"},
 ]

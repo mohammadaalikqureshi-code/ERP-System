@@ -89,7 +89,7 @@ export const LoginPage: React.FC = () => {
     { label: 'Dr. Ananya Bose', email: 'ananya.bose@sanjeevanihospital.in', role: 'Dermatology' },
     { label: 'Dr. Rohit Malhotra', email: 'rohit.malhotra@sanjeevanihospital.in', role: 'Gynaecology' },
     { label: 'Receptionist', email: 'priya.menon@sanjeevanihospital.in', role: 'Front Desk & Billing' },
-    { label: 'Lab Tech', email: 'mohammad.aalikqureshi@sanjeevanihospital.in', role: 'Diagnostics Laboratory' },
+    { label: 'Lab Tech', email: 'rakesh.kumar@sanjeevanihospital.in', role: 'Diagnostics Laboratory' },
     { label: 'Pharmacist', email: 'imran.qureshi@sanjeevanihospital.in', role: 'Pharmacy Inventory' },
     { label: 'Staff Nurse', email: 'sunita.yadav@sanjeevanihospital.in', role: 'Inpatient Care' },
   ];
@@ -132,9 +132,13 @@ export const LoginPage: React.FC = () => {
       const target = (role && ROLE_ROUTES[role]) ? ROLE_ROUTES[role] : '/doctor';
       navigate(target, { replace: true });
     } catch (error: any) {
+      const is401 = error?.response?.status === 401 || error?.status === 401;
+      const errorMsg = is401
+        ? 'Invalid email/phone or password. Please verify credentials (Demo: Medicare@2026).'
+        : (error.message || 'Unable to connect to authentication service. Please try again.');
       toast({
         title: 'Sign In Failed',
-        description: error.message || 'Invalid email/phone or password',
+        description: errorMsg,
         variant: 'destructive',
       });
     } finally {
