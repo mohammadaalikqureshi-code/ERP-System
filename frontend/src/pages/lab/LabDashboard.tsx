@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { useLabOrders, useSubmitResult } from '@/api/lab';
+import { useLabOrders, useSubmitResult, useLabCatalog, useCreateOrder } from '@/api/lab';
+import { usePatients } from '@/api/patients';
+import { useDoctors } from '@/api/doctors';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { downloadFile } from '@/lib/download';
 import { 
@@ -16,7 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, FileText, FlaskConical, CheckCircle, Search, AlertTriangle, AlertCircle, Download } from 'lucide-react';
+import { Loader2, FileText, FlaskConical, CheckCircle, Search, AlertTriangle, AlertCircle, Download, Plus, Check } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LabOrder } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -26,6 +29,7 @@ export default function LabDashboard() {
   const [activeTab, setActiveTab] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState<LabOrder | null>(null);
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [isNewOrderModalOpen, setIsNewOrderModalOpen] = useState(false);
   
   const { toast } = useToast();
   const { data: orders, isLoading, refetch } = useLabOrders({ search: searchTerm });
@@ -69,10 +73,19 @@ export default function LabDashboard() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader 
-        title="Diagnostic Laboratory" 
-        description="Process lab test requests, record measured values with auto-reference ranges, and generate diagnostic reports."
-      />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <PageHeader 
+          title="Diagnostic Laboratory" 
+          description="Process lab test requests, record measured values with auto-reference ranges, and generate diagnostic reports."
+        />
+        <Button 
+          onClick={() => setIsNewOrderModalOpen(true)}
+          className="bg-teal-600 hover:bg-teal-700 text-white font-bold gap-1.5 shadow-sm self-start sm:self-auto cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>+ New Walk-in Lab Order</span>
+        </Button>
+      </div>
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -204,14 +217,29 @@ export default function LabDashboard() {
                           <StatusBadge status={order.status} />
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
+                          <div className="flex justify-end items-center gap-2">
                             {order.status === 'completed' ? (
-                              <Button variant="outline" size="sm" onClick={() => handleDownloadPdf(order.id)}>
-                                <Download className="mr-1.5 h-3.5 w-3.5 text-primary" />
-                                Report PDF
-                              </Button>
+                              <>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => handleOpenResults(order)}
+                                  className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/40 cursor-pointer"
+                                >
+                                  <FlaskConical className="mr-1 h-3.5 w-3.5" />
+                                  Edit / View Values
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => handleDownloadPdf(order.id)}>
+                                  <Download className="mr-1.5 h-3.5 w-3.5 text-primary" />
+                                  Report PDF
+                                </Button>
+                              </>
                             ) : (
-                              <Button size="sm" onClick={() => handleOpenResults(order)}>
+                              <Button 
+                                size="sm" 
+                                onClick={() => handleOpenResults(order)}
+                                className="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs gap-1 cursor-pointer"
+                              >
                                 <FlaskConical className="mr-1.5 h-3.5 w-3.5" />
                                 Enter Values
                               </Button>
@@ -228,7 +256,7 @@ export default function LabDashboard() {
         </CardContent>
       </Card>
 
-      {/* Result Entry Modal */}
+      {/* Result Entry / Edit Modal */}
       {selectedOrder && (
         <ResultEntryModal
           order={selectedOrder}
@@ -240,7 +268,7 @@ export default function LabDashboard() {
           onSubmit={(items) => {
             submitResultMutation.mutate({ orderId: selectedOrder.id, items }, {
               onSuccess: () => {
-                toast({ title: 'Lab results saved and verified. Doctor notified.' });
+                toast({ title: 'Lab results saved and verified. Doctor & Patient notified.' });
                 setIsResultModalOpen(false);
                 refetch();
               },
@@ -250,6 +278,18 @@ export default function LabDashboard() {
             });
           }}
           isSubmitting={submitResultMutation.isPending}
+        />
+      )}
+
+      {/* New Walk-in Lab Order Modal */}
+      {isNewOrderModalOpen && (
+        <NewLabOrderModal
+          isOpen={isNewOrderModalOpen}
+          onClose={() => setIsNewOrderModalOpen(false)}
+          onSuccess={() => {
+            setIsNewOrderModalOpen(false);
+            refetch();
+          }}
         />
       )}
     </div>
@@ -536,6 +576,184 @@ function ResultEntryModal({
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
               <span>Verify & Release Certified Report</span>
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function NewLabOrderModal({
+  isOpen,
+  onClose,
+  onSuccess,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { data: patientsData } = usePatients({ limit: 50 });
+  const { data: doctors = [] } = useDoctors();
+  const { data: catalog = [] } = useLabCatalog();
+  const createOrderMutation = useCreateOrder();
+  const { toast } = useToast();
+
+  const [selectedPatientId, setSelectedPatientId] = useState('');
+  const [selectedDoctorId, setSelectedDoctorId] = useState('');
+  const [selectedTestIds, setSelectedTestIds] = useState<string[]>([]);
+  const [testSearch, setTestSearch] = useState('');
+
+  const patients = (patientsData as any)?.items || (patientsData as any)?.data || (Array.isArray(patientsData) ? patientsData : []);
+
+  const toggleTest = (testId: string) => {
+    setSelectedTestIds((prev) =>
+      prev.includes(testId) ? prev.filter((id) => id !== testId) : [...prev, testId]
+    );
+  };
+
+  const handleCreateOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatientId) {
+      toast({ title: 'Please select a patient', variant: 'destructive' });
+      return;
+    }
+    if (selectedTestIds.length === 0) {
+      toast({ title: 'Please select at least one test to order', variant: 'destructive' });
+      return;
+    }
+
+    const docId = selectedDoctorId || (doctors[0] as any)?.id;
+
+    try {
+      await createOrderMutation.mutateAsync({
+        patientId: selectedPatientId as any,
+        doctorId: docId as any,
+        tests: selectedTestIds as any,
+        status: 'pending',
+      });
+      toast({ title: 'New Lab Order Created! 🧪', description: 'Patient is ready for test sample & results entry.', variant: 'success' });
+      onSuccess();
+    } catch (err: any) {
+      toast({ title: 'Failed to create order', description: err.response?.data?.message || err.message, variant: 'destructive' });
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="border-b pb-3">
+          <DialogTitle className="text-xl font-bold flex items-center gap-2 text-stone-900 dark:text-stone-100">
+            <Plus className="w-5 h-5 text-teal-600" />
+            <span>Create New Walk-in Lab / Scan Order</span>
+          </DialogTitle>
+          <DialogDescription className="text-xs text-stone-500">
+            Order blood tests, diagnostic panels, or scans for walk-in or referred patients.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleCreateOrder} className="space-y-4 mt-3">
+          {/* Patient Selection */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-stone-800 dark:text-stone-200">1. Select Patient *</Label>
+            <select
+              value={selectedPatientId}
+              onChange={(e) => setSelectedPatientId(e.target.value)}
+              required
+              className="w-full h-9 rounded-md border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-950 px-3 text-xs font-medium focus:border-teal-500"
+            >
+              <option value="">-- Choose Registered Patient --</option>
+              {patients.map((p: any) => (
+                <option key={p.id} value={p.id}>
+                  {p.firstName || p.first_name} {p.lastName || p.last_name} ({p.patientCode || p.patient_code || 'PT'}) • {p.mobile || 'No Mobile'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Referring Doctor Selection */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-stone-800 dark:text-stone-200">2. Referring Doctor (Optional)</Label>
+            <select
+              value={selectedDoctorId}
+              onChange={(e) => setSelectedDoctorId(e.target.value)}
+              className="w-full h-9 rounded-md border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-950 px-3 text-xs font-medium focus:border-teal-500"
+            >
+              <option value="">-- OPD General Walk-in / Self --</option>
+              {doctors.map((d: any) => (
+                <option key={d.id} value={d.id}>
+                  Dr. {d.name || d.user?.fullName || d.user?.full_name || `${d.firstName || ''} ${d.lastName || ''}`} ({d.specialization || d.department || 'Doctor'})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Select Tests from Catalog */}
+          <div className="space-y-2 pt-2 border-t border-stone-200 dark:border-stone-800">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold text-stone-800 dark:text-stone-200">
+                3. Select Diagnostic Tests & Scans * ({selectedTestIds.length} Selected)
+              </Label>
+              <span className="text-[11px] text-teal-600 font-bold">
+                {catalog.length} Tests in Catalog
+              </span>
+            </div>
+
+            <Input
+              value={testSearch}
+              onChange={(e) => setTestSearch(e.target.value)}
+              placeholder="Search test name (e.g. CBC, Creatinine, Lipid, MRI, USG)..."
+              className="h-8 text-xs bg-white dark:bg-stone-950 border-stone-300 dark:border-stone-700"
+            />
+
+            <div className="max-h-52 overflow-y-auto border border-stone-200 dark:border-stone-800 rounded-xl p-2 divide-y divide-stone-100 dark:divide-stone-800 bg-stone-50/40 dark:bg-stone-900/40">
+              {catalog
+                .filter((t: any) => !testSearch || (t.testName || t.name || '').toLowerCase().includes(testSearch.toLowerCase()) || (t.category || '').toLowerCase().includes(testSearch.toLowerCase()))
+                .map((test: any) => {
+                  const id = test.id;
+                  const name = test.testName || test.name;
+                  const isChecked = selectedTestIds.includes(id);
+                  return (
+                    <div
+                      key={id}
+                      onClick={() => toggleTest(id)}
+                      className={`p-2 text-xs flex items-center justify-between rounded-lg cursor-pointer transition-colors ${
+                        isChecked
+                          ? 'bg-teal-100 dark:bg-teal-950 text-teal-950 dark:text-teal-100 font-bold'
+                          : 'hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-800 dark:text-stone-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`w-4 h-4 rounded flex items-center justify-center border text-[10px] ${
+                          isChecked ? 'bg-teal-600 text-white border-teal-600' : 'border-stone-400 bg-white dark:bg-stone-900'
+                        }`}>
+                          {isChecked && <Check className="w-3 h-3" />}
+                        </span>
+                        <span>{name}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400 font-normal">
+                          {test.category || 'General'}
+                        </span>
+                      </div>
+                      <span className="font-mono text-xs font-bold text-stone-600 dark:text-stone-300">
+                        ₹{test.price || 150}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          <DialogFooter className="border-t pt-3 flex items-center justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onClose} className="h-9 text-xs font-semibold">
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={createOrderMutation.isPending}
+              className="h-9 text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white gap-1.5 shadow-md cursor-pointer"
+            >
+              {createOrderMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
+              <span>Create Order & Ready for Testing</span>
             </Button>
           </DialogFooter>
         </form>
