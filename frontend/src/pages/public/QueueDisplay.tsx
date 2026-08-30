@@ -44,28 +44,41 @@ export default function QueueDisplay() {
     return () => clearInterval(timer);
   }, []);
 
-  // Web Speech Synthesis (TTS Voice Calling)
-  const speak = useCallback((text: string, isPriority = false) => {
-    if (!ttsEnabled || !window.speechSynthesis) return;
+  // Web Speech Synthesis (Bilingual TTS Voice Calling: English + Hindi)
+  const speakBilingual = useCallback((enText: string, hiText: string, isPriority = false) => {
+    if (!ttsEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
     
     if (isPriority) {
       window.speechSynthesis.cancel(); // Interrupt standard voice for emergency
     }
     
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = ttsLang;
-    utterance.rate = isPriority ? 0.95 : 0.88;
-    utterance.pitch = isPriority ? 1.15 : 1.0;
-    utterance.volume = 1.0;
-
     const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v => v.lang === ttsLang) 
+    const enVoice = voices.find(v => v.lang === 'en-IN') 
       || voices.find(v => v.lang.startsWith('en')) 
       || voices[0];
-    if (preferred) utterance.voice = preferred;
+    const hiVoice = voices.find(v => v.lang === 'hi-IN') 
+      || voices.find(v => v.lang.startsWith('hi')) 
+      || enVoice;
 
-    window.speechSynthesis.speak(utterance);
-  }, [ttsEnabled, ttsLang]);
+    // 1. English Announcement
+    const utteranceEn = new SpeechSynthesisUtterance(enText);
+    utteranceEn.lang = 'en-IN';
+    utteranceEn.rate = isPriority ? 0.95 : 0.88;
+    utteranceEn.pitch = isPriority ? 1.15 : 1.0;
+    utteranceEn.volume = 1.0;
+    if (enVoice) utteranceEn.voice = enVoice;
+
+    // 2. Hindi Announcement (Queued immediately after English)
+    const utteranceHi = new SpeechSynthesisUtterance(hiText);
+    utteranceHi.lang = 'hi-IN';
+    utteranceHi.rate = isPriority ? 0.92 : 0.85;
+    utteranceHi.pitch = isPriority ? 1.1 : 1.0;
+    utteranceHi.volume = 1.0;
+    if (hiVoice) utteranceHi.voice = hiVoice;
+
+    window.speechSynthesis.speak(utteranceEn);
+    window.speechSynthesis.speak(utteranceHi);
+  }, [ttsEnabled]);
 
   // Unlock browser audio context on any user touch/click/interaction
   useEffect(() => {
@@ -75,16 +88,20 @@ export default function QueueDisplay() {
       }
     };
     window.addEventListener('click', unlockAudio, { once: true });
+    window.addEventListener('dblclick', unlockAudio, { once: true });
+    window.addEventListener('touchstart', unlockAudio, { once: true });
     window.addEventListener('keydown', unlockAudio, { once: true });
     return () => {
       window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('dblclick', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
       window.removeEventListener('keydown', unlockAudio);
     };
   }, []);
 
   // =========================================================================
-  // 🚨 CONTINUOUS EMERGENCY VOICE ANNOUNCEMENT LOOP
-  // Repeats every 10 seconds UNTIL patient reaches the doctor cabin!
+  // 🚨 CONTINUOUS EMERGENCY VOICE ANNOUNCEMENT LOOP (Bilingual)
+  // Repeats every 12 seconds UNTIL patient reaches the doctor cabin!
   // =========================================================================
   const emergencyData = queueData?.emergency;
   const isEmergencyActive = !!emergencyData && (emergencyData.status === 'checked_in' || emergencyData.status === 'CHECKED_IN');
@@ -102,18 +119,17 @@ export default function QueueDisplay() {
       const dept = emergencyData.department || 'Emergency OPD Consultation Room';
 
       const announceEmergency = () => {
-        speak(
-          `Attention please. Critical Emergency call. Patient ${patientName}, Token ${token.split('').join(' ')}, please proceed immediately to ${dept} for Doctor ${doc}.`,
-          true
-        );
+        const enEmergency = `Attention please. Critical Emergency Call. Patient ${patientName}, Token ${token.split('').join(' ')}, please proceed immediately to ${dept} for Doctor ${doc}.`;
+        const hiEmergency = `कृपया ध्यान दें। आपातकालीन बुलावा। मरीज ${patientName}, टोकन नंबर ${token.split('').join(' ')}, कृपया तुरंत ${dept}, डॉक्टर ${doc} के पास पहुंचें।`;
+        speakBilingual(enEmergency, hiEmergency, true);
       };
 
       // Announce immediately once
       announceEmergency();
 
-      // Clear existing interval if any and loop repeatedly every 10 seconds
+      // Clear existing interval if any and loop repeatedly every 12 seconds
       if (emergencyIntervalRef.current) clearInterval(emergencyIntervalRef.current);
-      emergencyIntervalRef.current = setInterval(announceEmergency, 10000);
+      emergencyIntervalRef.current = setInterval(announceEmergency, 12000);
     } else {
       // Patient reached doctor OR silenced: STOP AUDIO LOOP IMMEDIATELY!
       if (emergencyIntervalRef.current) {
@@ -129,14 +145,14 @@ export default function QueueDisplay() {
         emergencyIntervalRef.current = null;
       }
     };
-  }, [isEmergencyActive, emergencyData, silencedEmergencyToken, speak]);
+  }, [isEmergencyActive, emergencyData, silencedEmergencyToken, speakBilingual]);
 
   // Handle manual silencing of the emergency voice alarm
   const handleSilenceEmergencyAlarm = () => {
     const currentToken = emergencyData?.token_number || emergencyData?.tokenNumber;
     if (silencedEmergencyToken === currentToken) {
       setSilencedEmergencyToken(null);
-      speak('Emergency voice alert resumed', true);
+      speakBilingual('Emergency voice alert resumed', 'आपातकालीन आवाज चेतावनी फिर से शुरू की गई', true);
     } else {
       setSilencedEmergencyToken(currentToken);
       if (window.speechSynthesis) window.speechSynthesis.cancel();
@@ -147,7 +163,7 @@ export default function QueueDisplay() {
     }
   };
 
-  // Regular Consultation Room Call Announcement
+  // Regular Consultation Room Call Announcement (Bilingual: English + Hindi)
   useEffect(() => {
     if (isEmergencyActive) return; // Suppress regular call during active emergency
 
@@ -156,38 +172,52 @@ export default function QueueDisplay() {
     
     if (currentToken && currentToken !== lastAnnouncedToken.current) {
       lastAnnouncedToken.current = currentToken;
+      const dept = current?.department || 'OPD';
       const room = current?.department ? `${current.department} Consultation Room` : 'the consultation room';
-      const doctorDisplay = (current?.doctor_name || current?.doctorName) ? `, Doctor ${current.doctor_name || current.doctorName}` : '';
-      const patientDisplay = (current?.patient_name || current?.patientName) ? `Patient ${current.patient_name || current.patientName}, ` : '';
+      const docName = current?.doctor_name || current?.doctorName || '';
+      const patName = current?.patient_name || current?.patientName || '';
+
+      const spelledToken = currentToken.split('').join(' ');
+      const doctorDisplayEn = docName ? `for Doctor ${docName}` : '';
+      const doctorDisplayHi = docName ? `डॉक्टर ${docName}` : 'डॉक्टर';
+      const patientDisplayEn = patName ? `Patient ${patName}, ` : '';
+      const patientDisplayHi = patName ? `मरीज ${patName}, ` : '';
+
+      const enText = `${patientDisplayEn}Token ${spelledToken}, please proceed to ${room} ${doctorDisplayEn}.`;
+      const hiText = `${patientDisplayHi}टोकन नंबर ${spelledToken}, कृपया ${dept} परामर्श कक्ष, ${doctorDisplayHi} के पास जाएं।`;
       
       setTimeout(() => {
-        speak(`${patientDisplay}Token ${currentToken.split('').join(' ')}${doctorDisplay}, please proceed to ${room}`);
+        speakBilingual(enText, hiText, false);
       }, 500);
     }
-  }, [queueData?.current, isEmergencyActive, speak]);
+  }, [queueData?.current, isEmergencyActive, speakBilingual]);
 
   // =========================================================================
-  // 🔊 PERMANENT VOICER TOGGLE LOGIC:
-  // 1 Click = Turn ON / Keep Permanently ON
-  // 2 Clicks (Double Click) = Turn OFF / Mute
+  // 🔊 VOICE SYSTEM TOGGLE (Auto Starts on Open, Double-Click Anywhere to Turn OFF/ON)
   // =========================================================================
-  const handleSingleClick = () => {
-    if (!ttsEnabled) {
-      setTtsEnabled(true);
-      localStorage.setItem('tv_voice_calling_active', 'true');
-      speak('Hospital voice announcement system is now active');
-    } else {
-      speak('Voice caller is active. Double-click to mute audio.');
+  const handleToggleVoice = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
     }
-  };
-
-  const handleDoubleClick = () => {
-    if (ttsEnabled) {
-      setTtsEnabled(false);
-      localStorage.setItem('tv_voice_calling_active', 'false');
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
-    }
-  };
+    setTtsEnabled((prev) => {
+      const nextState = !prev;
+      localStorage.setItem('tv_voice_calling_active', String(nextState));
+      if (nextState) {
+        if (window.speechSynthesis && window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+        speakBilingual(
+          'Bilingual voice system is active.',
+          'द्विभाषी आवाज प्रणाली सक्रिय है।'
+        );
+      } else {
+        if (window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
+      }
+      return nextState;
+    });
+  }, [speakBilingual]);
 
   const current = queueData?.current;
   const currentToken = current?.token_number || current?.tokenNumber || (isLoading ? '...' : '--');
@@ -199,7 +229,11 @@ export default function QueueDisplay() {
   const nextTokens: any[] = (queueData?.waiting || []).slice(0, 8);
 
   return (
-    <div className="flex min-h-screen flex-col bg-stone-950 p-6 md:p-10 text-white select-none relative overflow-hidden">
+    <div 
+      onDoubleClick={() => handleToggleVoice()}
+      title="Double-click anywhere on the screen to Turn ON / OFF Voice Announcements"
+      className="flex min-h-screen flex-col bg-stone-950 p-6 md:p-10 text-white select-none relative overflow-hidden cursor-default"
+    >
       {/* 🚨 TOP PROMINENT EMERGENCY ALERT BANNER (Active when Emergency Token waiting) */}
       {isEmergencyActive && (
         <div className="mb-6 p-5 rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white shadow-[0_0_60px_rgba(239,68,68,0.9)] border-4 border-white animate-pulse flex flex-col md:flex-row items-center justify-between gap-4 z-50">
@@ -270,9 +304,8 @@ export default function QueueDisplay() {
         <div className="flex items-center gap-6">
           <div className="font-mono text-3xl md:text-4xl font-bold text-stone-200">{time}</div>
           <button 
-            onClick={handleSingleClick}
-            onDoubleClick={handleDoubleClick}
-            title={ttsEnabled ? "Voice Calling is PERMANENTLY ON. Double-click to mute." : "Click once to activate voice calling."}
+            onClick={handleToggleVoice}
+            title={ttsEnabled ? "Bilingual Voice (English + Hindi) is Active. Click or Double-click anywhere on screen to Turn OFF." : "Click to activate Bilingual Voice Calling."}
             className={`rounded-full px-5 py-2.5 text-xs font-black tracking-wide transition-all shadow-xl flex items-center gap-2 cursor-pointer ${
               ttsEnabled 
                 ? 'bg-emerald-500/20 text-emerald-300 border-2 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-500/30' 
@@ -280,7 +313,7 @@ export default function QueueDisplay() {
             }`}
           >
             {ttsEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-rose-400" />}
-            {ttsEnabled ? '🔊 Voice Calling: PERMANENTLY ACTIVE' : '🔇 Audio Muted (Click to Enable)'}
+            {ttsEnabled ? '🔊 Voice: English + हिन्दी (Auto Active)' : '🔇 Audio Muted (Click to Enable)'}
           </button>
         </div>
       </div>
@@ -419,8 +452,12 @@ export default function QueueDisplay() {
             )}
           </div>
 
-          <div className="mt-4 pt-4 border-t border-stone-800/80 text-center text-xs text-stone-500">
-            Please be seated in the waiting lounge.
+          <div className="mt-4 pt-4 border-t border-stone-800/80 text-center text-xs text-stone-400 flex flex-col items-center gap-1">
+            <span className="text-stone-300 font-semibold">Please be seated in the waiting lounge.</span>
+            <span className="text-[11px] text-stone-500 flex items-center gap-1.5">
+              <span>🔊</span>
+              <span>Bilingual Voice Calling: English + हिन्दी • Double-click anywhere to Mute/Unmute</span>
+            </span>
           </div>
         </div>
       </div>
