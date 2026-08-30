@@ -14,7 +14,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { 
   FileText, CheckCircle, Plus, Trash2, Loader2, Save, Sparkles, 
   ArrowRight, Activity, HeartPulse, User, Pill, Stethoscope, 
-  Phone, AlertTriangle, ShieldCheck, Clock, Check, Search, ChevronDown, ListPlus, Calendar, Layers, Settings, Star, X
+  Phone, AlertTriangle, ShieldCheck, Clock, Check, Search, ChevronDown, ListPlus, Calendar, Layers, Settings, Star, X, FlaskConical
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -33,6 +33,43 @@ import {
   UNIVERSAL_HEIGHT_OPTIONS,
   DrugInfo
 } from '@/data/drugDatabase';
+
+// =========================================================================
+// 🔬 UNIVERSAL DIAGNOSTIC TESTS & SCANS DATABASE (MRI, CT, X-Ray, Lab)
+// =========================================================================
+export interface DiagnosticTestItem {
+  name: string;
+  category: string;
+  icon: string;
+}
+
+export const POPULAR_DIAGNOSTIC_TESTS: DiagnosticTestItem[] = [
+  { name: "Complete Blood Count (CBC)", category: "Haematology", icon: "🩸" },
+  { name: "MRI Brain (with / without contrast)", category: "MRI Scan", icon: "🩻" },
+  { name: "MRI Spine (Lumbosacral / Cervical)", category: "MRI Scan", icon: "🩻" },
+  { name: "HRCT Chest (High-Res Lung CT)", category: "CT Scan", icon: "🫁" },
+  { name: "CT Brain / Head Scan", category: "CT Scan", icon: "🩻" },
+  { name: "CT Abdomen & Pelvis (CECT)", category: "CT Scan", icon: "🩻" },
+  { name: "USG Whole Abdomen & Pelvis", category: "Ultrasound", icon: "📡" },
+  { name: "USG KUB (Kidney, Ureter, Bladder)", category: "Ultrasound", icon: "📡" },
+  { name: "Chest X-Ray (PA View)", category: "X-Ray", icon: "🩻" },
+  { name: "12-Lead ECG (Electrocardiogram)", category: "Cardiology", icon: "💓" },
+  { name: "2D Echocardiography (Echo)", category: "Cardiology", icon: "❤️" },
+  { name: "Lipid Profile (Cholesterol & Triglycerides)", category: "Biochemistry", icon: "🧪" },
+  { name: "Liver Function Test (LFT)", category: "Biochemistry", icon: "🧪" },
+  { name: "Kidney Function Test (KFT / Creatinine)", category: "Biochemistry", icon: "🧪" },
+  { name: "Fasting Blood Sugar (FBS)", category: "Biochemistry", icon: "🩸" },
+  { name: "Post Prandial Blood Sugar (PPBS)", category: "Biochemistry", icon: "🩸" },
+  { name: "HbA1c (Glycated Haemoglobin)", category: "Biochemistry", icon: "🩸" },
+  { name: "Serum Creatinine", category: "Biochemistry", icon: "🧪" },
+  { name: "Thyroid Profile (T3, T4, TSH)", category: "Endocrinology", icon: "🧬" },
+  { name: "Vitamin D (25-OH)", category: "Endocrinology", icon: "☀️" },
+  { name: "Vitamin B12", category: "Endocrinology", icon: "⚡" },
+  { name: "Urine Routine & Microscopy", category: "Microbiology", icon: "🔬" },
+  { name: "C-Reactive Protein (CRP)", category: "Serology", icon: "🔥" },
+  { name: "Dengue NS1 Antigen & Antibody", category: "Serology", icon: "🦟" },
+  { name: "Widal Test (Typhoid)", category: "Serology", icon: "🧪" },
+];
 
 // =========================================================================
 // 🌟 DOCTOR CUSTOM PRESETS INTERFACE & STORAGE
@@ -724,6 +761,19 @@ export default function ConsultationView() {
   const [isProcessingAction, setIsProcessingAction] = useState(false);
   const [customPresetsModalOpen, setCustomPresetsModalOpen] = useState(false);
 
+  // Diagnostic Tests & Scans State (MRI, CT, X-Ray, Lab)
+  const [selectedLabTests, setSelectedLabTests] = useState<string[]>([]);
+  const [labSearchQuery, setLabSearchQuery] = useState('');
+  const [isLabDropdownOpen, setIsLabDropdownOpen] = useState(false);
+
+  const toggleLabTest = (testName: string) => {
+    const clean = testName.trim();
+    if (!clean) return;
+    setSelectedLabTests(prev => 
+      prev.includes(clean) ? prev.filter(t => t !== clean) : [...prev, clean]
+    );
+  };
+
   // Doctor Personal Custom Presets State (Persisted in localStorage)
   const [customPresets, setCustomPresets] = useState<DoctorCustomPresets>(getInitialCustomPresets);
 
@@ -910,15 +960,23 @@ export default function ConsultationView() {
         instructions: m.instructions
       }));
 
+      let finalNotes = data.notes || '';
+      if (selectedLabTests.length > 0) {
+        const labNote = `\n\n[RECOMMENDED DIAGNOSTIC INVESTIGATIONS & SCANS]:\n• ` + selectedLabTests.join('\n• ');
+        if (!finalNotes.includes('[RECOMMENDED DIAGNOSTIC INVESTIGATIONS & SCANS]')) {
+          finalNotes = (finalNotes ? finalNotes + '\n' : '') + labNote;
+        }
+      }
+
       await savePrescriptionMutation.mutateAsync({
         appointmentId: appointmentId!,
         patientId: appointment?.patientId || (appointment as any)?.patient_id,
         doctorId: appointment?.doctorId || (appointment as any)?.doctor_id,
-        notes: data.notes,
+        notes: finalNotes,
         medicines: formattedItems as any,
         items: formattedItems as any,
       });
-      toast({ title: 'Prescription saved successfully', variant: 'success' });
+      toast({ title: 'Prescription & Diagnostic Orders saved successfully', variant: 'success' });
     } catch (err: any) {
       toast({ title: 'Failed to save prescription', description: err.response?.data?.message || err.message, variant: 'destructive' });
     }
@@ -929,7 +987,7 @@ export default function ConsultationView() {
     try {
       const rxValues = prescriptionForm.getValues();
       const validMeds = (rxValues.medicines || []).filter(m => m.medicineName?.trim());
-      if (validMeds.length > 0 || rxValues.notes?.trim()) {
+      if (validMeds.length > 0 || rxValues.notes?.trim() || selectedLabTests.length > 0) {
         const formattedItems = validMeds.map(m => ({
           medicine_name: m.medicineName,
           dosage: m.dosage,
@@ -939,11 +997,19 @@ export default function ConsultationView() {
           instructions: m.instructions
         }));
 
+        let finalNotes = rxValues.notes || '';
+        if (selectedLabTests.length > 0) {
+          const labNote = `\n\n[RECOMMENDED DIAGNOSTIC INVESTIGATIONS & SCANS]:\n• ` + selectedLabTests.join('\n• ');
+          if (!finalNotes.includes('[RECOMMENDED DIAGNOSTIC INVESTIGATIONS & SCANS]')) {
+            finalNotes = (finalNotes ? finalNotes + '\n' : '') + labNote;
+          }
+        }
+
         await savePrescriptionMutation.mutateAsync({
           appointmentId: appointmentId!,
           patientId: appointment?.patientId || (appointment as any)?.patient_id,
           doctorId: appointment?.doctorId || (appointment as any)?.doctor_id,
-          notes: rxValues.notes,
+          notes: finalNotes,
           medicines: formattedItems as any,
           items: formattedItems as any,
         });
@@ -1510,6 +1576,167 @@ export default function ConsultationView() {
                         </Button>
                       </div>
                     )}
+                  </div>
+
+                  {/* 🔬 DIAGNOSTIC TESTS & SCANS (MRI, CT, X-Ray, Blood, Pathology) */}
+                  <div className="p-4 rounded-2xl border border-teal-200 dark:border-teal-900 bg-teal-50/40 dark:bg-stone-900/40 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-teal-600 text-white">
+                          <FlaskConical className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-teal-950 dark:text-teal-200 flex items-center gap-2">
+                            <span>Diagnostic Investigations & Scans</span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300">
+                              {selectedLabTests.length} Selected
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-stone-500">
+                            Prescribe Blood tests, MRI, CT Scans, X-Rays, USG or Ultrasound for the patient.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Category Chips for One-Click Adding */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <span className="text-[10px] uppercase font-bold text-stone-500 self-center mr-1">Quick Presets:</span>
+                      {POPULAR_DIAGNOSTIC_TESTS.slice(0, 10).map((t, idx) => {
+                        const isSelected = selectedLabTests.includes(t.name);
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => toggleLabTest(t.name)}
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer ${
+                              isSelected
+                                ? 'bg-teal-600 text-white shadow-xs'
+                                : 'bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 border border-stone-200 dark:border-stone-700 hover:border-teal-400'
+                            }`}
+                          >
+                            <span>{t.icon}</span>
+                            <span>{t.name}</span>
+                            {isSelected && <Check className="w-3 h-3 ml-0.5" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Selected Tests Badges */}
+                    {selectedLabTests.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-white dark:bg-stone-900 border border-teal-200 dark:border-teal-800">
+                        {selectedLabTests.map((testName, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-teal-100 dark:bg-teal-950 text-teal-900 dark:text-teal-200 border border-teal-300 dark:border-teal-800"
+                          >
+                            <span>🧪</span>
+                            <span>{testName}</span>
+                            <button
+                              type="button"
+                              onClick={() => toggleLabTest(testName)}
+                              className="w-4 h-4 rounded-full flex items-center justify-center text-teal-700 hover:text-rose-600 hover:bg-rose-100 ml-1 cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Search & Custom Test Input */}
+                    <div className="relative">
+                      <div className="flex gap-1.5">
+                        <Input
+                          value={labSearchQuery}
+                          onChange={(e) => {
+                            setLabSearchQuery(e.target.value);
+                            if (!isLabDropdownOpen) setIsLabDropdownOpen(true);
+                          }}
+                          onFocus={() => setIsLabDropdownOpen(true)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (labSearchQuery.trim()) {
+                                toggleLabTest(labSearchQuery.trim());
+                                setLabSearchQuery('');
+                                setIsLabDropdownOpen(false);
+                              }
+                            }
+                          }}
+                          placeholder="Search or type diagnostic scan (e.g. MRI Brain, HRCT Chest, Lipid Profile, USG Abdomen)..."
+                          className="h-9 text-xs font-semibold bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700"
+                        />
+                        {labSearchQuery.trim() && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              toggleLabTest(labSearchQuery.trim());
+                              setLabSearchQuery('');
+                              setIsLabDropdownOpen(false);
+                            }}
+                            className="h-9 px-3 text-xs bg-teal-600 hover:bg-teal-700 text-white font-bold cursor-pointer shrink-0"
+                          >
+                            + Add Test
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Dropdown Options */}
+                      {isLabDropdownOpen && (
+                        <div 
+                          className="absolute left-0 right-0 bottom-full mb-1 z-30 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-2xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-stone-100 dark:divide-stone-800"
+                        >
+                          <div className="p-2 bg-stone-50 dark:bg-stone-800/60 flex items-center justify-between text-[10px] font-bold text-stone-500 uppercase tracking-wider">
+                            <span>Select Diagnostic Scan or Test ({POPULAR_DIAGNOSTIC_TESTS.length})</span>
+                            <button
+                              type="button"
+                              onClick={() => setIsLabDropdownOpen(false)}
+                              className="text-stone-400 hover:text-stone-700"
+                            >
+                              ✕ Close
+                            </button>
+                          </div>
+                          {POPULAR_DIAGNOSTIC_TESTS.filter(t => 
+                            !labSearchQuery || t.name.toLowerCase().includes(labSearchQuery.toLowerCase()) || t.category.toLowerCase().includes(labSearchQuery.toLowerCase())
+                          ).map((t, idx) => {
+                            const isSelected = selectedLabTests.includes(t.name);
+                            return (
+                              <div
+                                key={idx}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  toggleLabTest(t.name);
+                                  setLabSearchQuery('');
+                                }}
+                                className={`p-2.5 text-xs flex items-center justify-between hover:bg-teal-50 dark:hover:bg-teal-950/40 cursor-pointer transition-colors ${
+                                  isSelected ? 'bg-teal-50 dark:bg-teal-950/60 font-bold text-teal-900 dark:text-teal-200' : 'text-stone-800 dark:text-stone-200'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span>{t.icon}</span>
+                                  <span>{t.name}</span>
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-stone-500 font-normal">
+                                    {t.category}
+                                  </span>
+                                </div>
+                                {isSelected ? (
+                                  <span className="text-[10px] text-teal-600 font-bold flex items-center gap-1">
+                                    <Check className="w-3 h-3" /> Added
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-stone-400 hover:text-teal-600 font-semibold">
+                                    + Add
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-1.5 pt-2">
