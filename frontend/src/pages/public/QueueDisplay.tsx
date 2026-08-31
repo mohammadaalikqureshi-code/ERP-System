@@ -45,7 +45,7 @@ export default function QueueDisplay() {
   }, []);
 
   // Web Speech Synthesis (Bilingual TTS Voice Calling: English + Hindi)
-  const speakBilingual = useCallback((enText: string, hiText: string, isPriority = false) => {
+  const speakBilingual = useCallback((enText: string, hiText: string, isPriority = false, onComplete?: () => void) => {
     if (!ttsEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
     
     if (isPriority) {
@@ -76,6 +76,12 @@ export default function QueueDisplay() {
     utteranceHi.volume = 1.0;
     if (hiVoice) utteranceHi.voice = hiVoice;
 
+    // Fire onComplete callback after Hindi (last utterance) finishes
+    if (onComplete) {
+      utteranceHi.onend = () => onComplete();
+      utteranceHi.onerror = () => onComplete();
+    }
+
     window.speechSynthesis.speak(utteranceEn);
     window.speechSynthesis.speak(utteranceHi);
   }, [ttsEnabled]);
@@ -101,47 +107,56 @@ export default function QueueDisplay() {
 
   // =========================================================================
   // 🚨 CONTINUOUS EMERGENCY VOICE ANNOUNCEMENT LOOP (Bilingual)
-  // Repeats every 12 seconds UNTIL patient reaches the doctor cabin!
+  // Speaks full English + Hindi, waits 2 seconds, then repeats!
   // =========================================================================
   const emergencyData = queueData?.emergency;
   const isEmergencyActive = !!emergencyData && (emergencyData.status === 'checked_in' || emergencyData.status === 'CHECKED_IN');
 
   const [silencedEmergencyToken, setSilencedEmergencyToken] = useState<string | null>(null);
+  const emergencyActiveRef = useRef(false);
 
   useEffect(() => {
     const currentEmergencyToken = emergencyData?.token_number || emergencyData?.tokenNumber;
     const isSilenced = silencedEmergencyToken === currentEmergencyToken;
 
     if (isEmergencyActive && !isSilenced) {
+      emergencyActiveRef.current = true;
       const token = currentEmergencyToken || 'EMG-01';
       const patientName = emergencyData.patient_name || emergencyData.patientName || 'Emergency Patient';
       const doc = emergencyData.doctor_name || emergencyData.doctorName || 'Doctor';
       const dept = emergencyData.department || 'Emergency OPD Consultation Room';
 
-      const announceEmergency = () => {
-        const enEmergency = `Attention please. Critical Emergency Call. Patient ${patientName}, Token ${token.split('').join(' ')}, please proceed immediately to ${dept} for Doctor ${doc}.`;
-        const hiEmergency = `कृपया ध्यान दें। आपातकालीन बुलावा। मरीज ${patientName}, टोकन नंबर ${token.split('').join(' ')}, कृपया तुरंत ${dept}, डॉक्टर ${doc} के पास पहुंचें।`;
-        speakBilingual(enEmergency, hiEmergency, true);
+      const enEmergency = `Attention please. Critical Emergency Call. Patient ${patientName}, Token ${token.split('').join(' ')}, please proceed immediately to ${dept} for Doctor ${doc}.`;
+      const hiEmergency = `कृपया ध्यान दें। आपातकालीन बुलावा। मरीज ${patientName}, टोकन नंबर ${token.split('').join(' ')}, कृपया तुरंत ${dept}, डॉक्टर ${doc} के पास पहुंचें।`;
+
+      // Speak full English + Hindi, then wait 2 seconds, then repeat
+      const announceLoop = () => {
+        if (!emergencyActiveRef.current) return;
+        speakBilingual(enEmergency, hiEmergency, true, () => {
+          // After BOTH English & Hindi finish speaking, wait 2 seconds then repeat
+          if (emergencyActiveRef.current) {
+            emergencyIntervalRef.current = setTimeout(announceLoop, 2000);
+          }
+        });
       };
 
-      // Announce immediately once
-      announceEmergency();
-
-      // Clear existing interval if any and loop repeatedly every 12 seconds
-      if (emergencyIntervalRef.current) clearInterval(emergencyIntervalRef.current);
-      emergencyIntervalRef.current = setInterval(announceEmergency, 2000);
+      // Clear any existing timer and start
+      if (emergencyIntervalRef.current) clearTimeout(emergencyIntervalRef.current);
+      announceLoop();
     } else {
       // Patient reached doctor OR silenced: STOP AUDIO LOOP IMMEDIATELY!
+      emergencyActiveRef.current = false;
       if (emergencyIntervalRef.current) {
-        clearInterval(emergencyIntervalRef.current);
+        clearTimeout(emergencyIntervalRef.current);
         emergencyIntervalRef.current = null;
-        if (window.speechSynthesis) window.speechSynthesis.cancel();
       }
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
     }
 
     return () => {
+      emergencyActiveRef.current = false;
       if (emergencyIntervalRef.current) {
-        clearInterval(emergencyIntervalRef.current);
+        clearTimeout(emergencyIntervalRef.current);
         emergencyIntervalRef.current = null;
       }
     };
