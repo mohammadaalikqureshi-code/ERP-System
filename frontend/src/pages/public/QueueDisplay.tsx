@@ -86,23 +86,44 @@ export default function QueueDisplay() {
     window.speechSynthesis.speak(utteranceHi);
   }, [ttsEnabled]);
 
+  // Track whether user has interacted with the page (required by browsers for speech)
+  const userHasInteracted = useRef(false);
+  const pendingAnnouncement = useRef<{ en: string; hi: string } | null>(null);
+
   // Unlock browser audio context on any user touch/click/interaction
   useEffect(() => {
     const unlockAudio = () => {
+      userHasInteracted.current = true;
       if (window.speechSynthesis && window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
       }
+      // If there's a pending announcement that failed due to no user gesture, speak it now!
+      if (pendingAnnouncement.current) {
+        const { en, hi } = pendingAnnouncement.current;
+        pendingAnnouncement.current = null;
+        setTimeout(() => {
+          speakBilingual(en, hi, false);
+        }, 300);
+      }
     };
-    window.addEventListener('click', unlockAudio, { once: true });
-    window.addEventListener('dblclick', unlockAudio, { once: true });
-    window.addEventListener('touchstart', unlockAudio, { once: true });
-    window.addEventListener('keydown', unlockAudio, { once: true });
+    ['click', 'dblclick', 'touchstart', 'keydown', 'mousedown'].forEach(evt => {
+      window.addEventListener(evt, unlockAudio);
+    });
     return () => {
-      window.removeEventListener('click', unlockAudio);
-      window.removeEventListener('dblclick', unlockAudio);
-      window.removeEventListener('touchstart', unlockAudio);
-      window.removeEventListener('keydown', unlockAudio);
+      ['click', 'dblclick', 'touchstart', 'keydown', 'mousedown'].forEach(evt => {
+        window.removeEventListener(evt, unlockAudio);
+      });
     };
+  }, [speakBilingual]);
+
+  // Force-load voices on mount (some browsers lazy-load them)
+  useEffect(() => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+    }
   }, []);
 
   // =========================================================================
@@ -172,13 +193,15 @@ export default function QueueDisplay() {
       setSilencedEmergencyToken(currentToken);
       if (window.speechSynthesis) window.speechSynthesis.cancel();
       if (emergencyIntervalRef.current) {
-        clearInterval(emergencyIntervalRef.current);
+        clearTimeout(emergencyIntervalRef.current);
         emergencyIntervalRef.current = null;
       }
     }
   };
 
   // Regular Consultation Room Call Announcement (Bilingual: English + Hindi)
+  // With retry: if browser blocks speech (no user gesture yet), saves it as pending
+  // and announces immediately once the user clicks/touches the page.
   useEffect(() => {
     if (isEmergencyActive) return; // Suppress regular call during active emergency
 
@@ -200,10 +223,28 @@ export default function QueueDisplay() {
 
       const enText = `${patientDisplayEn}Token ${spelledToken}, please proceed to ${room} ${doctorDisplayEn}.`;
       const hiText = `${patientDisplayHi}टोकन नंबर ${spelledToken}, कृपया ${dept} परामर्श कक्ष, ${doctorDisplayHi} के पास जाएं।`;
+
+      // Save as pending in case browser blocks it
+      pendingAnnouncement.current = { en: enText, hi: hiText };
       
+      // Try speaking immediately
       setTimeout(() => {
         speakBilingual(enText, hiText, false);
-      }, 500);
+      }, 400);
+
+      // Retry after 3 seconds in case the first attempt was silently blocked
+      setTimeout(() => {
+        if (pendingAnnouncement.current && pendingAnnouncement.current.en === enText) {
+          // Still pending — try again (browser may have unblocked by now)
+          speakBilingual(enText, hiText, false);
+          // Clear pending after this retry
+          setTimeout(() => {
+            if (pendingAnnouncement.current?.en === enText) {
+              pendingAnnouncement.current = null;
+            }
+          }, 5000);
+        }
+      }, 3500);
     }
   }, [queueData?.current, isEmergencyActive, speakBilingual]);
 
