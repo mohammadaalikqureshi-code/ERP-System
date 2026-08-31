@@ -44,15 +44,55 @@ export default function QueueDisplay() {
     return () => clearInterval(timer);
   }, []);
 
-  // Web Speech Synthesis (Bilingual TTS Voice Calling: English + Hindi)
+  // Hospital Melodic Attention Chime (Ding-Dong) to grab hall attention & wake audio context
+  const playChime = useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(587.33, now); // D5
+      gain1.gain.setValueAtTime(0.3, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.35);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(880, now + 0.18); // A5
+      gain2.gain.setValueAtTime(0.3, now + 0.18);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.18);
+      osc2.stop(now + 0.65);
+    } catch (e) {
+      console.log("Audio chime error:", e);
+    }
+  }, []);
+
+  // Web Speech Synthesis (Sequential Chained Bilingual Engine: English FIRST, Hindi SECOND)
+  // Protected against Chrome V8 Garbage Collection Bug
   const speakBilingual = useCallback((enText: string, hiText: string, isPriority = false, onComplete?: () => void) => {
     if (!ttsEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
     
-    if (isPriority) {
-      window.speechSynthesis.cancel(); // Interrupt standard voice for emergency
-    }
-    
-    const voices = window.speechSynthesis.getVoices();
+    playChime();
+
+    try {
+      window.speechSynthesis.cancel();
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    } catch (e) {}
+
+    const voices = window.speechSynthesis.getVoices() || [];
     const enVoice = voices.find(v => v.lang === 'en-IN') 
       || voices.find(v => v.lang.startsWith('en')) 
       || voices[0];
@@ -68,7 +108,7 @@ export default function QueueDisplay() {
     utteranceEn.volume = 1.0;
     if (enVoice) utteranceEn.voice = enVoice;
 
-    // 2. Hindi Announcement (Queued immediately after English)
+    // 2. Hindi Announcement
     const utteranceHi = new SpeechSynthesisUtterance(hiText);
     utteranceHi.lang = 'hi-IN';
     utteranceHi.rate = isPriority ? 0.92 : 0.85;
@@ -76,28 +116,65 @@ export default function QueueDisplay() {
     utteranceHi.volume = 1.0;
     if (hiVoice) utteranceHi.voice = hiVoice;
 
-    // Fire onComplete callback after Hindi (last utterance) finishes
-    if (onComplete) {
-      utteranceHi.onend = () => onComplete();
-      utteranceHi.onerror = () => onComplete();
-    }
+    // Keep references in global window scope so Chrome Garbage Collector cannot kill speech
+    (window as any)._activeUtterances = [utteranceEn, utteranceHi];
 
-    window.speechSynthesis.speak(utteranceEn);
-    window.speechSynthesis.speak(utteranceHi);
-  }, [ttsEnabled]);
+    // English finishes -> Start Hindi
+    utteranceEn.onend = () => {
+      setTimeout(() => {
+        try {
+          if (window.speechSynthesis) {
+            window.speechSynthesis.speak(utteranceHi);
+          }
+        } catch (e) {
+          onComplete?.();
+        }
+      }, 150);
+    };
 
-  // Track whether user has interacted with the page (required by browsers for speech)
-  const userHasInteracted = useRef(false);
+    utteranceEn.onerror = () => {
+      try {
+        if (window.speechSynthesis) {
+          window.speechSynthesis.speak(utteranceHi);
+        }
+      } catch (e) {
+        onComplete?.();
+      }
+    };
+
+    // Hindi finishes -> Call onComplete
+    utteranceHi.onend = () => {
+      (window as any)._activeUtterances = [];
+      onComplete?.();
+    };
+
+    utteranceHi.onerror = () => {
+      (window as any)._activeUtterances = [];
+      onComplete?.();
+    };
+
+    // Start English after short 250ms delay for chime to ring
+    setTimeout(() => {
+      try {
+        if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+        window.speechSynthesis.speak(utteranceEn);
+      } catch (e) {
+        console.error("Speech speak failed", e);
+      }
+    }, 280);
+  }, [ttsEnabled, playChime]);
+
+  // Track user gesture interaction for browser audio unlock
+  const [hasInteracted, setHasInteracted] = useState(false);
   const pendingAnnouncement = useRef<{ en: string; hi: string } | null>(null);
 
   // Unlock browser audio context on any user touch/click/interaction
   useEffect(() => {
     const unlockAudio = () => {
-      userHasInteracted.current = true;
+      setHasInteracted(true);
       if (window.speechSynthesis && window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
       }
-      // If there's a pending announcement that failed due to no user gesture, speak it now!
       if (pendingAnnouncement.current) {
         const { en, hi } = pendingAnnouncement.current;
         pendingAnnouncement.current = null;
@@ -116,7 +193,7 @@ export default function QueueDisplay() {
     };
   }, [speakBilingual]);
 
-  // Force-load voices on mount (some browsers lazy-load them)
+  // Force-load voices on mount
   useEffect(() => {
     if (window.speechSynthesis) {
       window.speechSynthesis.getVoices();
@@ -126,9 +203,18 @@ export default function QueueDisplay() {
     }
   }, []);
 
+  // Chrome periodic resume watchdog
+  useEffect(() => {
+    const watchdog = setInterval(() => {
+      if (window.speechSynthesis && window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    }, 5000);
+    return () => clearInterval(watchdog);
+  }, []);
+
   // =========================================================================
   // 🚨 CONTINUOUS EMERGENCY VOICE ANNOUNCEMENT LOOP (Bilingual)
-  // Speaks full English + Hindi, waits 2 seconds, then repeats!
   // =========================================================================
   const emergencyData = queueData?.emergency;
   const isEmergencyActive = !!emergencyData && (emergencyData.status === 'checked_in' || emergencyData.status === 'CHECKED_IN');
@@ -150,22 +236,18 @@ export default function QueueDisplay() {
       const enEmergency = `Attention please. Critical Emergency Call. Patient ${patientName}, Token ${token.split('').join(' ')}, please proceed immediately to ${dept} for Doctor ${doc}.`;
       const hiEmergency = `कृपया ध्यान दें। आपातकालीन बुलावा। मरीज ${patientName}, टोकन नंबर ${token.split('').join(' ')}, कृपया तुरंत ${dept}, डॉक्टर ${doc} के पास पहुंचें।`;
 
-      // Speak full English + Hindi, then wait 2 seconds, then repeat
       const announceLoop = () => {
         if (!emergencyActiveRef.current) return;
         speakBilingual(enEmergency, hiEmergency, true, () => {
-          // After BOTH English & Hindi finish speaking, wait 2 seconds then repeat
           if (emergencyActiveRef.current) {
             emergencyIntervalRef.current = setTimeout(announceLoop, 2000);
           }
         });
       };
 
-      // Clear any existing timer and start
       if (emergencyIntervalRef.current) clearTimeout(emergencyIntervalRef.current);
       announceLoop();
     } else {
-      // Patient reached doctor OR silenced: STOP AUDIO LOOP IMMEDIATELY!
       emergencyActiveRef.current = false;
       if (emergencyIntervalRef.current) {
         clearTimeout(emergencyIntervalRef.current);
@@ -200,10 +282,8 @@ export default function QueueDisplay() {
   };
 
   // Regular Consultation Room Call Announcement (Bilingual: English + Hindi)
-  // With retry: if browser blocks speech (no user gesture yet), saves it as pending
-  // and announces immediately once the user clicks/touches the page.
   useEffect(() => {
-    if (isEmergencyActive) return; // Suppress regular call during active emergency
+    if (isEmergencyActive) return;
 
     const current = queueData?.current;
     const currentToken = current?.token_number || current?.tokenNumber;
@@ -224,27 +304,11 @@ export default function QueueDisplay() {
       const enText = `${patientDisplayEn}Token ${spelledToken}, please proceed to ${room} ${doctorDisplayEn}.`;
       const hiText = `${patientDisplayHi}टोकन नंबर ${spelledToken}, कृपया ${dept} परामर्श कक्ष, ${doctorDisplayHi} के पास जाएं।`;
 
-      // Save as pending in case browser blocks it
       pendingAnnouncement.current = { en: enText, hi: hiText };
       
-      // Try speaking immediately
       setTimeout(() => {
         speakBilingual(enText, hiText, false);
       }, 400);
-
-      // Retry after 3 seconds in case the first attempt was silently blocked
-      setTimeout(() => {
-        if (pendingAnnouncement.current && pendingAnnouncement.current.en === enText) {
-          // Still pending — try again (browser may have unblocked by now)
-          speakBilingual(enText, hiText, false);
-          // Clear pending after this retry
-          setTimeout(() => {
-            if (pendingAnnouncement.current?.en === enText) {
-              pendingAnnouncement.current = null;
-            }
-          }, 5000);
-        }
-      }, 3500);
     }
   }, [queueData?.current, isEmergencyActive, speakBilingual]);
 
@@ -357,8 +421,26 @@ export default function QueueDisplay() {
           </p>
         </div>
 
-        <div className="flex items-center gap-6">
-          <div className="font-mono text-3xl md:text-4xl font-bold text-stone-200">{time}</div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="font-mono text-2xl md:text-3xl font-bold text-stone-200">{time}</div>
+          
+          <button
+            type="button"
+            onClick={() => {
+              setHasInteracted(true);
+              const token = currentToken !== '--' && currentToken !== '...' ? currentToken : 'A-001';
+              const doc = doctorName || 'Vikram Nair';
+              const en = `Attention please. Token ${token.split('').join(' ')}, please proceed to Orthopaedics Consultation Room for Doctor ${doc}.`;
+              const hi = `कृपया ध्यान दें। टोकन नंबर ${token.split('').join(' ')}, कृपया Orthopaedics परामर्श कक्ष, डॉक्टर ${doc} के पास जाएं।`;
+              speakBilingual(en, hi, false);
+            }}
+            className="rounded-full px-4 py-2 text-xs font-bold bg-teal-600/30 text-teal-300 border border-teal-400 hover:bg-teal-600/50 flex items-center gap-1.5 cursor-pointer shadow-lg transition-all"
+            title="Click to hear a test announcement immediately in English + Hindi"
+          >
+            <Volume2 className="w-4 h-4 text-teal-300" />
+            <span>🔊 Test Voice</span>
+          </button>
+
           <button 
             onClick={handleToggleVoice}
             title={ttsEnabled ? "Bilingual Voice (English + Hindi) is Active. Click or Double-click anywhere on screen to Turn OFF." : "Click to activate Bilingual Voice Calling."}
@@ -373,6 +455,25 @@ export default function QueueDisplay() {
           </button>
         </div>
       </div>
+
+      {/* 🔔 Interactive Browser Audio Unlock Notification (Disappears after first click) */}
+      {!hasInteracted && (
+        <div 
+          onClick={() => {
+            setHasInteracted(true);
+            playChime();
+            const token = currentToken !== '--' && currentToken !== '...' ? currentToken : 'A-001';
+            const doc = doctorName || 'Vikram Nair';
+            const en = `Attention please. Token ${token.split('').join(' ')}, please proceed to Orthopaedics Consultation Room for Doctor ${doc}.`;
+            const hi = `कृपया ध्यान दें। टोकन नंबर ${token.split('').join(' ')}, कृपया Orthopaedics परामर्श कक्ष, डॉक्टर ${doc} के पास जाएं।`;
+            speakBilingual(en, hi, false);
+          }}
+          className="mb-6 p-4 rounded-2xl bg-teal-500/20 border-2 border-teal-400 text-teal-200 text-center font-bold text-sm shadow-xl animate-pulse cursor-pointer flex items-center justify-center gap-2 hover:bg-teal-500/30 transition-all"
+        >
+          <Volume2 className="w-5 h-5 text-teal-300 animate-bounce" />
+          <span>🔔 TV Audio Muted by Browser — Click Anywhere Here to Enable Live Voice Announcements</span>
+        </div>
+      )}
 
       {/* Main Grid: Serving & Next Up */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 items-stretch">
