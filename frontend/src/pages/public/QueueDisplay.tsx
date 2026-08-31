@@ -129,7 +129,7 @@ export default function QueueDisplay() {
 
       // Clear existing interval if any and loop repeatedly every 12 seconds
       if (emergencyIntervalRef.current) clearInterval(emergencyIntervalRef.current);
-      emergencyIntervalRef.current = setInterval(announceEmergency, 12000);
+      emergencyIntervalRef.current = setInterval(announceEmergency, 2000);
     } else {
       // Patient reached doctor OR silenced: STOP AUDIO LOOP IMMEDIATELY!
       if (emergencyIntervalRef.current) {
