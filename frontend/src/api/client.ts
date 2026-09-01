@@ -75,7 +75,14 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config as RetriableRequest | undefined;
 
     // An expired access token: refresh once, then replay the original call.
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+    const isAuthRoute = originalRequest?.url?.includes('/auth/login') || originalRequest?.url?.includes('/auth/refresh');
+    const isPublicRoute = originalRequest?.url?.includes('/public/') || 
+      window.location.pathname.startsWith('/login') || 
+      window.location.pathname.startsWith('/queue') || 
+      window.location.pathname.startsWith('/reports') ||
+      window.location.pathname.startsWith('/register');
+
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isAuthRoute && !isPublicRoute) {
       originalRequest._retry = true;
       try {
         const token = await refreshAccessToken();
@@ -83,7 +90,7 @@ apiClient.interceptors.response.use(
         return apiClient(originalRequest);
       } catch {
         useAuthStore.getState().logout();
-        if (!window.location.pathname.startsWith('/login')) {
+        if (!isPublicRoute && !window.location.pathname.startsWith('/login')) {
           window.location.href = '/login';
         }
         return Promise.reject(error);

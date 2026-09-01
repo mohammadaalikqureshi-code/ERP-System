@@ -172,7 +172,11 @@ class LabService:
             selectinload(LabOrder.patient),
             selectinload(LabOrder.doctor).selectinload(Doctor.user),
             selectinload(LabOrder.results).selectinload(LabResult.test)
-        ).order_by(LabOrder.created_at.desc() if hasattr(LabOrder, 'created_at') else LabOrder.id)
+        )
+        if clinic_id:
+            stmt = stmt.join(LabOrder.patient).where(Patient.clinic_id == clinic_id)
+
+        stmt = stmt.order_by(LabOrder.created_at.desc() if hasattr(LabOrder, 'created_at') else LabOrder.id)
         
         result = await db.execute(stmt)
         orders = result.scalars().all()

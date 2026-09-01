@@ -114,6 +114,10 @@ export const router = createBrowserRouter([
     element: withSuspense(QueueDisplay)
   },
   {
+    path: '/queue-display',
+    element: withSuspense(QueueDisplay)
+  },
+  {
     // The waiting-room TV is usually bookmarked at this longer path.
     path: '/queue/display',
     element: withSuspense(QueueDisplay)

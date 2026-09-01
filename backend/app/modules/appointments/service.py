@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.orm import selectinload
 from app.models.appointment import Appointment
 from app.models.doctor import Doctor
@@ -21,6 +21,70 @@ logger = logging.getLogger(__name__)
 class AppointmentService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def get_appointments_list(
+        self,
+        clinic_id: uuid.UUID,
+        page: int = 1,
+        limit: int = 50,
+        patient_id: uuid.UUID = None,
+        doctor_id: uuid.UUID = None,
+        status: str = None,
+        target_date: str = None,
+        search: str = None,
+    ):
+        stmt = (
+            select(Appointment)
+            .options(
+                selectinload(Appointment.patient),
+                selectinload(Appointment.doctor).selectinload(Doctor.user),
+            )
+            .where(Appointment.clinic_id == clinic_id)
+        )
+
+        if patient_id:
+            stmt = stmt.where(Appointment.patient_id == patient_id)
+        if doctor_id:
+            stmt = stmt.where(Appointment.doctor_id == doctor_id)
+        if status:
+            stmt = stmt.where(Appointment.status == status)
+        if target_date:
+            from datetime import date as d_cls
+            if isinstance(target_date, str):
+                try:
+                    d_obj = d_cls.fromisoformat(target_date)
+                    stmt = stmt.where(Appointment.appointment_date == d_obj)
+                except Exception:
+                    pass
+            elif isinstance(target_date, d_cls):
+                stmt = stmt.where(Appointment.appointment_date == target_date)
+        if search:
+            search_filter = f"%{search}%"
+            stmt = stmt.join(Appointment.patient).where(
+                or_(
+                    Appointment.token_number.ilike(search_filter),
+                    Patient.full_name.ilike(search_filter),
+                    Patient.mobile.ilike(search_filter),
+                    Patient.patient_code.ilike(search_filter),
+                )
+            )
+
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total = (await self.db.execute(count_stmt)).scalar() or 0
+
+        offset = max(0, (page - 1) * limit)
+        stmt = stmt.order_by(Appointment.appointment_date.desc(), Appointment.queue_number.asc()).offset(offset).limit(limit)
+        items = list((await self.db.execute(stmt)).scalars().all())
+
+        return {
+            "items": items,
+            "data": items,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total + limit - 1) // limit if limit else 1,
+            "totalPages": (total + limit - 1) // limit if limit else 1,
+        }
 
     async def _generate_queue_number(self, doctor_id: uuid.UUID, target_date: any) -> int:
         if isinstance(target_date, str):

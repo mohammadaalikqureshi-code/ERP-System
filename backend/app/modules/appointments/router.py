@@ -24,6 +24,36 @@ async def create_quick_walkin_endpoint(
 ):
     return await AppointmentService(db).create_quick_walkin(clinic_id, current_user.id, data)
 
+@router.get("", dependencies=[Depends(require_permission("appointments.read"))])
+async def list_appointments(
+    page: int = 1,
+    limit: int = 50,
+    patient_id: uuid.UUID = None,
+    patientId: uuid.UUID = None,
+    doctor_id: uuid.UUID = None,
+    doctorId: uuid.UUID = None,
+    status: str = None,
+    target_date: str = None,
+    targetDate: str = None,
+    date: str = None,
+    search: str = None,
+    db: AsyncSession = Depends(get_db),
+    clinic_id: uuid.UUID = Depends(get_clinic_scope),
+):
+    pid = patient_id or patientId
+    did = doctor_id or doctorId
+    d_str = target_date or targetDate or date
+    return await AppointmentService(db).get_appointments_list(
+        clinic_id=clinic_id,
+        page=page,
+        limit=limit,
+        patient_id=pid,
+        doctor_id=did,
+        status=status,
+        target_date=d_str,
+        search=search,
+    )
+
 @router.post("", response_model=AppointmentResponse, dependencies=[Depends(require_permission("appointments.create"))])
 async def create_appointment(
     data: AppointmentCreate,

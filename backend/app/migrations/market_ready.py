@@ -114,9 +114,24 @@ DDL_STATEMENTS = [
         unit = 'mg/dL', reference_range_min = 0.6, reference_range_max = 1.2, critical_high = 4.0
     WHERE test_name ILIKE '%creatinine%' AND reference_range_min IS NULL;""",
 
-    """UPDATE lab_test_catalog SET
-        unit = 'mIU/L', reference_range_min = 0.4, reference_range_max = 4.0, critical_low = 0.1, critical_high = 10.0
-    WHERE test_name ILIKE '%tsh%' OR test_name ILIKE '%thyroid%' AND reference_range_min IS NULL;""",
+    # --- High-Velocity 4-Year Scalability Indexes ---
+    "CREATE INDEX IF NOT EXISTS idx_appointments_clinic_date ON appointments(clinic_id, appointment_date);",
+    "CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);",
+    "CREATE INDEX IF NOT EXISTS idx_appointments_doctor ON appointments(doctor_id);",
+    "CREATE INDEX IF NOT EXISTS idx_appointments_patient ON appointments(patient_id);",
+    "CREATE INDEX IF NOT EXISTS idx_appointments_token ON appointments(clinic_id, token_number);",
+    "CREATE INDEX IF NOT EXISTS idx_bills_clinic_patient ON bills(clinic_id, patient_id);",
+    "CREATE INDEX IF NOT EXISTS idx_bills_created_at ON bills(created_at);",
+    "CREATE INDEX IF NOT EXISTS idx_bills_payment_status ON bills(payment_status);",
+    "CREATE INDEX IF NOT EXISTS idx_lab_orders_clinic_status ON lab_orders(clinic_id, status);",
+    "CREATE INDEX IF NOT EXISTS idx_lab_orders_patient ON lab_orders(patient_id);",
+    "CREATE INDEX IF NOT EXISTS idx_prescriptions_patient ON prescriptions(patient_id);",
+    "CREATE INDEX IF NOT EXISTS idx_prescriptions_appointment ON prescriptions(appointment_id);",
+    "CREATE INDEX IF NOT EXISTS idx_inventory_clinic ON inventory_items(clinic_id);",
+    "CREATE INDEX IF NOT EXISTS idx_inventory_expiry ON inventory_items(expiry_date);",
+    "CREATE INDEX IF NOT EXISTS idx_audit_clinic_created ON audit_logs(clinic_id, created_at);",
+    "CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON in_app_notifications(recipient_user_id, is_read);",
+    "CREATE INDEX IF NOT EXISTS idx_patients_code ON patients(clinic_id, patient_code);",
 ]
 
 
