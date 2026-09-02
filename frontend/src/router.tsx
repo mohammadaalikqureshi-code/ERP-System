@@ -30,6 +30,7 @@ const PatientDashboard = React.lazy(() => import('./pages/patient/PatientDashboa
 const ReportsPage = React.lazy(() => import('./pages/admin/ReportsPage'));
 const PanelsPage = React.lazy(() => import('./pages/admin/PanelsPage'));
 const AiConsolePage = React.lazy(() => import('./pages/admin/AiConsolePage'));
+const ApiKeysPage = React.lazy(() => import('./pages/admin/ApiKeysPage'));
 const InventoryDashboard = React.lazy(() => import('./pages/inventory/InventoryDashboard'));
 const ClinicSettingsPage = React.lazy(() => import('./pages/admin/ClinicSettingsPage'));
 const ReceptionDashboard = React.lazy(() => import('./pages/reception/ReceptionDashboard'));
@@ -148,6 +149,7 @@ export const router = createBrowserRouter([
           { path: 'backup', element: withSuspense(BackupPage) },
           { path: 'reports', element: withSuspense(ReportsPage) },
           { path: 'ai', element: withSuspense(AiConsolePage) },
+          { path: 'api-keys', element: withSuspense(ApiKeysPage) },
           { path: 'panels', element: withSuspense(PanelsPage) },
           { path: 'settings', element: withSuspense(ClinicSettingsPage) },
         ]

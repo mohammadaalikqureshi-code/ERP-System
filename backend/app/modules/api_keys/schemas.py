@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # Providers a clinic can hold a key for. Adding one here is all that is needed
 # for it to appear in the admin UI.
 SUPPORTED_PROVIDERS = {
+    "groq": "AI assistant (Groq)",
     "anthropic": "AI assistant (Claude)",
     "whatsapp": "WhatsApp Business messaging",
     "msg91": "SMS delivery (MSG91)",

@@ -1,10 +1,26 @@
 # ==============================================================================
-# 🚀 Render Blueprint Specification — MediCare Hospital ERP (100% Free Compatible)
+# Render Blueprint — MediCare Hospital ERP
+#
+# Docker-free: both services use Render's NATIVE runtimes (python + static), so
+# there is no Dockerfile, no WSL/Docker engine, and nothing to build into an
+# image. Postgres is a managed Render database. Redis is optional (see below).
+#
+# Deploy: push this repo to GitHub, then in Render → "New +" → "Blueprint" and
+# point it at the repo. Render reads this file and creates everything.
+# After the first deploy, paste your Groq key into the API service's AI_API_KEY
+# env var (or add it in-app under Admin → API Keys).
 # ==============================================================================
+
+databases:
+  - name: medicare-db
+    plan: free
+    databaseName: clinic_erp
+    user: clinic
+    region: singapore
 
 services:
   # ----------------------------------------------------------------------------
-  # ⚙️ FASTAPI BACKEND API WEB SERVICE (FREE TIER)
+  # FastAPI backend — native Python (no Docker)
   # ----------------------------------------------------------------------------
   - type: web
     name: medicare-erp-api
@@ -12,15 +28,24 @@ services:
     rootDir: backend
     plan: free
     region: singapore
-    buildCommand: pip install -r requirements.txt && python -m scripts.seed
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    # Migrations + optional seed run at startup (free tier has no preDeploy hook).
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash render_start.sh
+    healthCheckPath: /api/v1/health
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      # Managed Postgres — wired automatically from the database above.
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: medicare-db
+          property: connectionString
+      # "staging" = secure cookies (so cross-site auth works over HTTPS) without
+      # the strict production secret checks, and OTP is returned in the API
+      # response so patient sign-in works without an SMS gateway. Good for a
+      # test deployment. Switch to "production" once real secrets + SMS are set.
       - key: ENVIRONMENT
-        value: production
+        value: staging
       - key: DEBUG
         value: 'False'
       - key: SECRET_KEY
@@ -29,29 +54,53 @@ services:
         generateValue: true
       - key: JWT_REFRESH_SECRET_KEY
         generateValue: true
+      # Any generated value works — the app derives a valid Fernet key from it.
       - key: ENCRYPTION_KEY
-        value: 'gAAAAABn-placeholderkeyforproductionfernetencryption12345='
+        generateValue: true
+      # Seed the demo clinic on first boot so you can sign in immediately.
+      # Set to false after the first successful deploy to speed up restarts.
+      - key: SEED_ON_STARTUP
+        value: 'true'
+      # ---- AI assistant (Groq) ----
+      - key: AI_ENABLED
+        value: 'true'
+      - key: AI_PROVIDER
+        value: groq
+      - key: AI_MODEL
+        value: llama-3.3-70b-versatile
+      # Paste your Groq key (gsk_...) here in the dashboard, or leave blank and
+      # add it in-app under Admin → API Keys. sync:false = not stored in git.
+      - key: AI_API_KEY
+        sync: false
+      # The frontend static site's public URL (used for CORS).
       - key: ALLOWED_ORIGINS
-        value: 'https://medicare-erp-web.onrender.com,http://localhost:3000,http://localhost:5173'
+        value: 'https://medicare-erp-web.onrender.com'
       - key: COOKIE_SAMESITE
-        value: 'none'
+        value: none
+      # ---- Redis (OPTIONAL) ----
+      # The app runs fine without Redis: rate limiting fails open, caching is
+      # skipped, and realtime is delivered in-process (single instance). To turn
+      # it on, create a Render Key Value instance and set REDIS_HOST / REDIS_PORT
+      # / REDIS_PASSWORD here.
 
   # ----------------------------------------------------------------------------
-  # 🌐 REACT + VITE FRONTEND STATIC SITE (FREE TIER)
+  # React + Vite frontend — native static site (no Docker)
   # ----------------------------------------------------------------------------
   - type: web
     name: medicare-erp-web
     runtime: static
     rootDir: frontend
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
     envVars:
+      # The API's hostname; the frontend prefixes https:// and /api/v1 itself.
+      # (It also auto-derives *-web → *-api on onrender.com, so this is belt-and-braces.)
       - key: VITE_API_BASE_URL
         fromService:
           type: web
           name: medicare-erp-api
           property: host
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

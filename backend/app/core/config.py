@@ -130,8 +130,11 @@ class Settings(BaseSettings):
 
     # -------------------------------------------------------------------- AI
     AI_ENABLED: bool = True
-    AI_PROVIDER: Literal["anthropic"] = "anthropic"
-    AI_MODEL: str = "claude-opus-5"
+    # "groq" (OpenAI-compatible, the default) or "anthropic" (Claude).
+    AI_PROVIDER: Literal["groq", "anthropic"] = "groq"
+    # A model the chosen provider serves. Defaults suit Groq; if you switch
+    # AI_PROVIDER to anthropic, set a Claude model here too (e.g. claude-opus-5).
+    AI_MODEL: str = "llama-3.3-70b-versatile"
     # Optional platform-wide key. A clinic can store its own key instead, which
     # always takes priority. If neither is set, AI features report themselves
     # as unavailable rather than failing requests.

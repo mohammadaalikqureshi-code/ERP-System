@@ -30,7 +30,7 @@ from app.models.lab import LabOrder
 from app.models.patient import Patient
 from app.models.system import AiConversation, AiInsight, AiMessage
 from app.modules.ai import prompts
-from app.modules.ai.provider import AiReply, AiRequestFailed, AiUnavailable, ClaudeProvider
+from app.modules.ai.provider import AiProvider, AiReply, AiRequestFailed, AiUnavailable, make_provider
 from app.modules.api_keys.service import ApiKeyService
 
 logger = logging.getLogger(__name__)
@@ -42,17 +42,17 @@ class AiService:
         self.keys = ApiKeyService(db)
 
     # ------------------------------------------------------------ plumbing
-    async def _provider(self, clinic_id: Optional[UUID]) -> ClaudeProvider:
+    async def _provider(self, clinic_id: Optional[UUID]) -> AiProvider:
         if not settings.AI_ENABLED:
             raise AiUnavailable("AI features are switched off for this deployment.")
 
-        api_key = await self.keys.resolve("anthropic", clinic_id)
+        api_key = await self.keys.resolve(settings.AI_PROVIDER, clinic_id)
         if not api_key:
             raise AiUnavailable(
                 "No AI API key is configured. An administrator can add one under "
                 "Settings → API Keys."
             )
-        return ClaudeProvider(api_key)
+        return make_provider(settings.AI_PROVIDER, api_key)
 
     async def _ask(
         self,
@@ -66,10 +66,10 @@ class AiService:
         try:
             reply = await provider.complete(system, messages, max_tokens)
         except AiRequestFailed as exc:
-            await self.keys.record_usage("anthropic", clinic_id, error=str(exc))
+            await self.keys.record_usage(settings.AI_PROVIDER, clinic_id, error=str(exc))
             raise
 
-        await self.keys.record_usage("anthropic", clinic_id)
+        await self.keys.record_usage(settings.AI_PROVIDER, clinic_id)
         return reply
 
     async def status(self, clinic_id: Optional[UUID]) -> dict:
@@ -77,7 +77,7 @@ class AiService:
         if not settings.AI_ENABLED:
             return {"available": False, "reason": "AI features are switched off for this deployment."}
 
-        api_key = await self.keys.resolve("anthropic", clinic_id)
+        api_key = await self.keys.resolve(settings.AI_PROVIDER, clinic_id)
         if not api_key:
             return {
                 "available": False,

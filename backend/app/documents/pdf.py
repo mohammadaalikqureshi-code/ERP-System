@@ -48,19 +48,30 @@ td.num, th.num { text-align: right; }
 
 
 class PdfGenerationError(BaseAPIException):
-    def __init__(self, message: str):
-        super().__init__(message, code="pdf_failed", status_code=500)
+    def __init__(self, message: str, status_code: int = 500):
+        super().__init__(message, code="pdf_failed", status_code=status_code)
 
 
 def render_pdf(html: str, extra_css: Optional[str] = None) -> bytes:
-    """Turn an HTML document into PDF bytes."""
+    """Turn an HTML document into PDF bytes.
+
+    WeasyPrint is imported here (not at module load) so the rest of the app runs
+    even where its native libraries are absent — e.g. a plain Render/Heroku
+    Python service with no Pango/Cairo. In that case PDF endpoints return a
+    clear 503 ("not available here") instead of taking the whole app down.
+    """
     try:
         from weasyprint import CSS, HTML
-    except ImportError as exc:  # pragma: no cover - depends on the host image
-        logger.error("WeasyPrint is not usable", exc_info=True)
+    except Exception as exc:  # pragma: no cover - depends on the host libraries
+        # ImportError (package missing) OR OSError (Pango/Cairo shared libs not
+        # loadable) — both mean the same thing to a caller: no PDFs here.
+        logger.error("WeasyPrint is not usable in this environment", exc_info=True)
         raise PdfGenerationError(
             "PDF generation is not available on this server: WeasyPrint's system "
-            "libraries (Pango/Cairo) are missing."
+            "libraries (Pango/Cairo) are not installed. Everything else works; "
+            "run the app from the Docker image (or install the libraries) to "
+            "enable prescription, receipt and lab-report PDFs.",
+            status_code=503,
         ) from exc
 
     stylesheets = [CSS(string=BASE_CSS)]

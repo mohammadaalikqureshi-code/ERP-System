@@ -29,10 +29,31 @@ class DecryptionError(Exception):
     """Raised when stored ciphertext cannot be read back."""
 
 
+def _fernet_from_seed(seed: str) -> Fernet:
+    """A valid Fernet key derived deterministically from any string.
+
+    Lets a host supply ``ENCRYPTION_KEY`` as an ordinary secret (e.g. Render's
+    auto-generated value) instead of a pre-formatted Fernet key.
+    """
+    digest = hashlib.sha256(seed.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
 @lru_cache
 def _cipher() -> Fernet:
     if settings.ENCRYPTION_KEY:
-        return Fernet(settings.ENCRYPTION_KEY.encode())
+        try:
+            # A real, correctly-formatted Fernet key is used verbatim so keys
+            # can be rotated deliberately.
+            return Fernet(settings.ENCRYPTION_KEY.encode())
+        except Exception:
+            # Any non-empty value still works: derive a Fernet key from it. This
+            # is what makes a one-click Render deploy (generateValue) just work.
+            logger.warning(
+                "ENCRYPTION_KEY is not a Fernet key — deriving one from it. For "
+                "deliberate key rotation, set a real Fernet key (see crypto.py)."
+            )
+            return _fernet_from_seed(settings.ENCRYPTION_KEY)
 
     # Development fallback: a deterministic key derived from SECRET_KEY. This
     # keeps local data readable across restarts without shipping a real key.
@@ -40,8 +61,7 @@ def _cipher() -> Fernet:
         "ENCRYPTION_KEY is not set — deriving a development key from SECRET_KEY. "
         "Set a real Fernet key before going live."
     )
-    digest = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
-    return Fernet(base64.urlsafe_b64encode(digest))
+    return _fernet_from_seed(settings.SECRET_KEY)
 
 
 def encrypt(plaintext: Optional[str]) -> Optional[str]:

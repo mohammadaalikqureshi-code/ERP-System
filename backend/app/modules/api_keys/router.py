@@ -14,7 +14,7 @@ from app.core.deps import get_current_active_user
 from app.middleware.clinic_scope import get_clinic_scope
 from app.middleware.rbac import require_permission
 from app.models.user import User
-from app.modules.ai.provider import AiRequestFailed, AiUnavailable, ClaudeProvider
+from app.modules.ai.provider import AI_PROVIDERS, AiRequestFailed, AiUnavailable, make_provider
 from app.modules.api_keys.schemas import (
     ApiKeyCreate,
     ApiKeyListResponse,
@@ -79,16 +79,18 @@ async def test_api_key(
 ):
     """Make a real call with the stored key so an admin knows it works.
 
-    Right now only the AI provider can be verified live; the messaging
-    providers report whether a key is present.
+    AI providers (Groq, Claude) are verified with a real one-token round-trip;
+    the messaging providers only report whether a key is present, because a live
+    check would send an actual message.
     """
+    provider = provider.strip().lower()
     service = ApiKeyService(db)
     secret: Optional[str] = await service.resolve(provider, clinic_id)
 
     if not secret:
         return ApiKeyTestResult(provider=provider, ok=False, message="No key configured.")
 
-    if provider != "anthropic":
+    if provider not in AI_PROVIDERS:
         return ApiKeyTestResult(
             provider=provider,
             ok=True,
@@ -96,7 +98,7 @@ async def test_api_key(
         )
 
     try:
-        reply = await ClaudeProvider(secret).complete(
+        reply = await make_provider(provider, secret).complete(
             system="Reply with the single word: ok",
             messages=[{"role": "user", "content": "ping"}],
             max_tokens=16,

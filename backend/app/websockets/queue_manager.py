@@ -6,6 +6,12 @@ broadcast goes out over a Redis pub/sub channel, and each process relays what
 it receives to its own connected sockets.
 
     service  --publish-->  Redis  -->  every API process  -->  its sockets
+
+When Redis is not configured (e.g. a single-instance Render/Heroku deploy with
+no Redis add-on), there is nothing to fan out *to* — so broadcasts are delivered
+directly to this process's own sockets instead. Realtime then works fully on one
+instance; the only thing lost is cross-instance delivery, which single-instance
+deployments do not need.
 """
 
 import asyncio
@@ -28,13 +34,18 @@ class ConnectionManager:
         self.active_connections: Dict[str, Set[WebSocket]] = {}
         self._listener: asyncio.Task | None = None
         self._lock = asyncio.Lock()
+        # Set once we learn Redis is not usable, so we stop trying to relay
+        # through it and deliver events in-process instead.
+        self._redis_unavailable = False
 
     async def connect(self, room: str, websocket: WebSocket) -> None:
         """Accept a socket and put it in a room. Starts the relay if needed."""
         await websocket.accept()
         async with self._lock:
             self.active_connections.setdefault(room, set()).add(websocket)
-            if self._listener is None or self._listener.done():
+            # Only run the Redis relay while Redis looks usable; otherwise local
+            # delivery in broadcast() handles everything.
+            if not self._redis_unavailable and (self._listener is None or self._listener.done()):
                 self._listener = asyncio.create_task(self._relay_from_redis())
 
     async def disconnect(self, room: str, websocket: WebSocket) -> None:
@@ -47,13 +58,27 @@ class ConnectionManager:
                 self.active_connections.pop(room, None)
 
     async def broadcast(self, room: str, message: dict) -> None:
-        """Send a message to a room across every API process."""
-        try:
-            await get_redis().publish(CHANNEL, json.dumps({"room": room, "message": message}))
-        except Exception:
-            # Never let a realtime failure break the request that triggered it:
-            # the browser also polls, so a missed event self-corrects.
-            logger.warning("Could not publish realtime event", exc_info=True)
+        """Send a message to a room.
+
+        Uses Redis pub/sub so every API process delivers to its own sockets;
+        falls back to delivering to this process's sockets directly when Redis
+        is unavailable, so realtime still works on a single instance.
+        """
+        if not self._redis_unavailable:
+            try:
+                await get_redis().publish(
+                    CHANNEL, json.dumps({"room": room, "message": message})
+                )
+                return
+            except Exception:
+                # First failure: switch to in-process delivery from now on.
+                self._redis_unavailable = True
+                logger.info(
+                    "Redis not available for realtime fan-out — delivering events "
+                    "in-process (single-instance mode)."
+                )
+
+        await self._send_local(room, message)
 
     async def _send_local(self, room: str, message: dict) -> None:
         sockets = list(self.active_connections.get(room, ()))
@@ -87,7 +112,12 @@ class ConnectionManager:
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.error("Realtime relay stopped unexpectedly", exc_info=True)
+            # Redis went away (or was never there): stop relaying and let
+            # broadcast() deliver in-process instead of respawning this task.
+            self._redis_unavailable = True
+            logger.info(
+                "Realtime relay unavailable (no Redis) — using in-process delivery."
+            )
         finally:
             try:
                 await pubsub.unsubscribe(CHANNEL)

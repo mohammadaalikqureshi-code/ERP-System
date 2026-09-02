@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # stored its own key. Lets a single-tenant deployment configure everything with
 # env vars and never touch the admin screen.
 ENV_FALLBACKS = {
+    "groq": "AI_API_KEY",
     "anthropic": "AI_API_KEY",
     "whatsapp": "WHATSAPP_API_TOKEN",
     "msg91": "MSG91_API_KEY",
