@@ -6,8 +6,29 @@
  */
 
 function resolveApiBaseUrl(): string {
-  const envUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+  // Check user override first
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const customUrl = localStorage.getItem('medicare_custom_api_url')?.trim();
+    if (customUrl) {
+      let formatted = customUrl.replace(/\/+$/, '');
+      if (!formatted.startsWith('http://') && !formatted.startsWith('https://') && !formatted.startsWith('/')) {
+        formatted = `https://${formatted}`;
+      }
+      if (!formatted.includes('/api/v1')) {
+        formatted = `${formatted}/api/v1`;
+      }
+      return formatted;
+    }
+  }
+
+  let envUrl = import.meta.env.VITE_API_BASE_URL?.trim();
   if (envUrl) {
+    // If Render Blueprint passed internal private hostname like "medicare-erp-api:10000" or "medicare-erp-api"
+    if (envUrl.includes(':10000') || (!envUrl.includes('.') && !envUrl.startsWith('/'))) {
+      const cleanHost = envUrl.split(':')[0].replace(/^https?:\/\//, '');
+      envUrl = `https://${cleanHost}.onrender.com`;
+    }
+
     let formatted = envUrl.replace(/\/+$/, '');
     if (!formatted.startsWith('http://') && !formatted.startsWith('https://') && !formatted.startsWith('/')) {
       formatted = `https://${formatted}`;

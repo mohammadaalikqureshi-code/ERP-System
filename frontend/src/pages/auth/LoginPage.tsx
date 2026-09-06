@@ -3,10 +3,11 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useForm as useHookForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import axios from 'axios';
 import apiClient from '@/api/client';
-import { ROLE_ROUTES } from '@/lib/constants';
+import { ROLE_ROUTES, API_BASE_URL } from '@/lib/constants';
 import { useToast } from '@/components/ui/use-toast';
-import { Activity, KeyRound, Lock, Mail, ArrowLeft, CheckCircle2, ShieldCheck, FileText, HeartPulse } from 'lucide-react';
+import { Activity, KeyRound, Lock, Mail, ArrowLeft, CheckCircle2, ShieldCheck, FileText, HeartPulse, Server, WifiOff, RefreshCw, Settings2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -55,6 +56,65 @@ export const LoginPage: React.FC = () => {
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
   const [forgotDebugCode, setForgotDebugCode] = useState<string | null>(null);
   const [isForgotLoading, setIsForgotLoading] = useState(false);
+
+  // API Server Health Status
+  const [apiStatus, setApiStatus] = useState<'checking' | 'online' | 'waking_up' | 'offline'>('checking');
+  const [activeApiUrl, setActiveApiUrl] = useState<string>(() => {
+    return localStorage.getItem('medicare_custom_api_url') || API_BASE_URL;
+  });
+  const [isApiModalOpen, setIsApiModalOpen] = useState(false);
+  const [customApiInput, setCustomApiInput] = useState(() => {
+    return localStorage.getItem('medicare_custom_api_url') || API_BASE_URL;
+  });
+
+  const checkApiHealth = async (urlToCheck?: string) => {
+    setApiStatus('checking');
+    try {
+      const target = (urlToCheck || localStorage.getItem('medicare_custom_api_url') || API_BASE_URL).replace(/\/+$/, '');
+      const healthUrl = target.endsWith('/api/v1') ? `${target}/health` : `${target}/api/v1/health`;
+      const res = await axios.get(healthUrl, { timeout: 12000 });
+      if (res.data?.status === 'ok' || res.status === 200) {
+        setApiStatus('online');
+      } else {
+        setApiStatus('offline');
+      }
+    } catch (err: any) {
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        setApiStatus('waking_up');
+      } else {
+        setApiStatus('offline');
+      }
+    }
+  };
+
+  useEffect(() => {
+    checkApiHealth();
+  }, []);
+
+  const handleSaveCustomApi = (url: string) => {
+    let clean = url.trim().replace(/\/+$/, '');
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+      clean = `https://${clean}`;
+    }
+    if (!clean.includes('/api/v1')) {
+      clean = `${clean}/api/v1`;
+    }
+    localStorage.setItem('medicare_custom_api_url', clean);
+    setActiveApiUrl(clean);
+    setCustomApiInput(clean);
+    setIsApiModalOpen(false);
+    toast({
+      title: 'API Server Configured',
+      description: `Target set to ${clean}. Reconnecting...`,
+    });
+    setTimeout(() => {
+      window.location.reload();
+    }, 400);
+  };
+
+  const handleResetToOfficialRender = () => {
+    handleSaveCustomApi('https://medicare-erp-api.onrender.com/api/v1');
+  };
 
   const {
     register,
@@ -303,6 +363,58 @@ export const LoginPage: React.FC = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md z-10">
         <div className="bg-white dark:bg-stone-950 py-8 px-4 shadow-xl shadow-stone-200/50 dark:shadow-none sm:rounded-2xl sm:px-10 border border-stone-100 dark:border-stone-800">
+          {/* API Server Live Status Badge */}
+          <div className="mb-4 p-2.5 rounded-xl border flex items-center justify-between text-xs transition-colors bg-stone-50 dark:bg-stone-900 border-stone-200 dark:border-stone-800">
+            <div className="flex items-center gap-2 truncate">
+              {apiStatus === 'online' && (
+                <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  API Online
+                </span>
+              )}
+              {apiStatus === 'waking_up' && (
+                <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  Waking Up (Cold Start)
+                </span>
+              )}
+              {apiStatus === 'offline' && (
+                <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-medium">
+                  <WifiOff className="w-3 h-3" />
+                  API Disconnected
+                </span>
+              )}
+              {apiStatus === 'checking' && (
+                <span className="flex items-center gap-1.5 text-stone-500 font-medium">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  Checking Server...
+                </span>
+              )}
+              <span className="text-stone-400 truncate max-w-[150px]" title={activeApiUrl}>
+                {activeApiUrl.replace(/^https?:\/\//, '')}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => checkApiHealth()}
+                className="p-1 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 rounded"
+                title="Refresh Status"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${apiStatus === 'checking' ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsApiModalOpen(true)}
+                className="px-2 py-0.5 text-[11px] font-medium text-teal-600 hover:text-teal-700 dark:text-teal-400 hover:underline flex items-center gap-1"
+              >
+                <Settings2 className="w-3 h-3" />
+                Configure
+              </button>
+            </div>
+          </div>
+
           <Tabs defaultValue="password" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6 bg-stone-100 dark:bg-stone-900">
               <TabsTrigger value="password">Password Login</TabsTrigger>
@@ -653,6 +765,70 @@ export const LoginPage: React.FC = () => {
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Backend API Configuration Modal */}
+      <Dialog open={isApiModalOpen} onOpenChange={setIsApiModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Server className="w-5 h-5 text-teal-600" />
+              Backend Server Configuration
+            </DialogTitle>
+            <DialogDescription>
+              Configure the API endpoint URL for your Render or hosted backend.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-xs font-medium">Active API URL</Label>
+              <Input
+                value={customApiInput}
+                onChange={(e) => setCustomApiInput(e.target.value)}
+                placeholder="https://medicare-erp-api.onrender.com/api/v1"
+                className="mt-1 font-mono text-xs"
+              />
+            </div>
+
+            <div className="p-3 bg-stone-50 dark:bg-stone-900 rounded-lg text-xs space-y-2 border border-stone-200 dark:border-stone-800">
+              <p className="font-semibold text-stone-700 dark:text-stone-300">Quick Presets:</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleResetToOfficialRender}
+                  className="text-xs h-7"
+                >
+                  🚀 Official Render API
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleSaveCustomApi('http://localhost:8000/api/v1')}
+                  className="text-xs h-7"
+                >
+                  💻 Localhost (8000)
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => setIsApiModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+              onClick={() => handleSaveCustomApi(customApiInput)}
+            >
+              Save & Connect
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

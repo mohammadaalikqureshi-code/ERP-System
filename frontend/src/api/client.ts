@@ -27,6 +27,11 @@ type RetriableRequest = InternalAxiosRequestConfig & { _retry?: boolean };
 let refreshRequest: Promise<string> | null = null;
 
 apiClient.interceptors.request.use((config) => {
+  const customUrl = localStorage.getItem('medicare_custom_api_url')?.trim();
+  if (customUrl) {
+    config.baseURL = customUrl.replace(/\/+$/, '');
+  }
+
   const { accessToken, clinicId } = useAuthStore.getState();
 
   if (accessToken) {
