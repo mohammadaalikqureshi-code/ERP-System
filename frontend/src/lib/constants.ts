@@ -21,10 +21,27 @@ function resolveApiBaseUrl(): string {
   // Automatic Cloud Domain resolution for Render & hosted environments
   if (typeof window !== 'undefined' && window.location) {
     const hostname = window.location.hostname;
-    // If hosted on Render (e.g. medicare-erp-web.onrender.com)
+    
+    // If running locally in development or docker
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return '/api/v1';
+    }
+
+    // If hosted on Render (e.g. medicare-erp-web.onrender.com, erp-web.onrender.com, etc.)
     if (hostname.includes('.onrender.com')) {
-      const apiHost = hostname.replace(/-web(\.onrender\.com)$/, '-api$1');
-      return `https://${apiHost}/api/v1`;
+      if (hostname.includes('-web.')) {
+        const apiHost = hostname.replace('-web.', '-api.');
+        return `https://${apiHost}/api/v1`;
+      }
+      if (hostname.includes('-frontend.')) {
+        const apiHost = hostname.replace('-frontend.', '-backend.');
+        return `https://${apiHost}/api/v1`;
+      }
+      if (hostname.includes('-api.')) {
+        return `https://${hostname}/api/v1`;
+      }
+      // Standard Render production API endpoint fallback
+      return 'https://medicare-erp-api.onrender.com/api/v1';
     }
   }
 

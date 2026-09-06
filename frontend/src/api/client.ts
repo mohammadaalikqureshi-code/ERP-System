@@ -19,7 +19,7 @@ const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true,
-  timeout: 30_000,
+  timeout: 75_000,
 });
 
 type RetriableRequest = InternalAxiosRequestConfig & { _retry?: boolean };
@@ -102,11 +102,18 @@ apiClient.interceptors.response.use(
       | { error?: { message?: string }; detail?: string | { msg?: string }[] }
       | undefined;
     const detail = payload?.detail;
+    
+    let defaultMsg = 'Something went wrong. Please try again.';
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      defaultMsg = 'Connection timed out. If the server was sleeping on Render, it is now waking up — please try again in a few seconds.';
+    } else if (error.message === 'Network Error' || !error.response) {
+      defaultMsg = 'Cannot connect to server. If the backend is waking up on Render (cold start), please wait 15-30 seconds and try again.';
+    }
+
     error.message =
       payload?.error?.message ||
       (typeof detail === 'string' ? detail : Array.isArray(detail) ? detail[0]?.msg : undefined) ||
-      error.message ||
-      'Something went wrong. Please try again.';
+      defaultMsg;
 
     return Promise.reject(error);
   }
