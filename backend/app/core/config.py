@@ -69,6 +69,18 @@ class Settings(BaseSettings):
                 return v.replace("postgres://", "postgresql+asyncpg://", 1)
             elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
                 return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif "://" not in v and v:
+                # If only a hostname/db-host or host:port was provided (e.g. Render's dpg-... hostname)
+                if "@" in v:
+                    return f"postgresql+asyncpg://{v}"
+                user = os.getenv("POSTGRES_USER", "postgres")
+                password = os.getenv("POSTGRES_PASSWORD", "postgres")
+                db = os.getenv("POSTGRES_DB", "clinic_erp")
+                port = os.getenv("POSTGRES_PORT", "5432")
+                host = v.split(":")[0]
+                if ":" in v:
+                    port = v.split(":")[1]
+                return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}"
         return v
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10

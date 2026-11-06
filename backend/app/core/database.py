@@ -25,9 +25,19 @@ _pool_options = (
     }
 )
 
-engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG, **_pool_options)
+try:
+    engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG, **_pool_options)
+except Exception as exc:
+    import logging
+    logger = logging.getLogger("app.core.database")
+    logger.error(
+        "DATABASE_URL '%s' could not be initialized (%s). Falling back to SQLite.",
+        settings.DATABASE_URL,
+        exc,
+    )
+    engine = create_async_engine("sqlite+aiosqlite:///./medicare.db")
 
-if settings.DATABASE_URL.startswith("sqlite"):
+if settings.DATABASE_URL.startswith("sqlite") or str(engine.url).startswith("sqlite"):
     import uuid
     from sqlalchemy import event
 
