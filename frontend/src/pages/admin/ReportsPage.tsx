@@ -7,7 +7,7 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format, subDays } from 'date-fns';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatDoctorName } from '@/lib/utils';
 
 const COLORS = ['#0d9488', '#f59e0b', '#8b5cf6', '#ef4444', '#10b981', '#6b7280'];
 
@@ -119,9 +119,9 @@ const ReportsPageContent = () => {
                 <div className="h-full flex items-center justify-center">Loading...</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={performanceData || []} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <BarChart data={(performanceData || []).map((d: any) => ({ ...d, doctorName: formatDoctorName(d.doctorName) }))} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="doctorName" />
+                    <XAxis dataKey="doctorName" tickFormatter={(val) => formatDoctorName(val)} />
                     <YAxis yAxisId="left" />
                     <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `₹${val}`} />
                     <Tooltip formatter={(value, name) => [name === 'revenueGenerated' ? formatCurrency(Number(value)) : String(value), name === 'revenueGenerated' ? 'Revenue' : 'Appointments']} />

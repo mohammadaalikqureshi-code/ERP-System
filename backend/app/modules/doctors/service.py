@@ -1,3 +1,4 @@
+import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, cast
 from app.models.doctor import Doctor, DoctorSchedule, DoctorLeave
@@ -5,6 +6,7 @@ from app.models.clinic import Holiday
 from app.models.appointment import Appointment
 from app.modules.doctors.schemas import DoctorCreate, DoctorUpdate, ScheduleCreate, LeaveCreate
 from app.core.exceptions import NotFoundError
+from app.core.utils import split_doctor_name, format_doctor_name, clean_doctor_name
 import uuid
 from datetime import date, datetime, timedelta, time
 
@@ -13,7 +15,17 @@ class DoctorService:
         self.db = db
 
     async def create_doctor(self, clinic_id: uuid.UUID, data: DoctorCreate):
-        doctor = Doctor(clinic_id=clinic_id, **data.model_dump())
+        values = data.model_dump()
+        if not values.get("token_prefix"):
+            from app.core.utils import index_to_token_prefix
+            stmt = select(Doctor.token_prefix).where(Doctor.clinic_id == clinic_id, Doctor.is_deleted == False)
+            existing_prefixes = set((await self.db.execute(stmt)).scalars().all())
+            for i in range(100):
+                candidate = index_to_token_prefix(i)
+                if candidate not in existing_prefixes:
+                    values["token_prefix"] = candidate
+                    break
+        doctor = Doctor(clinic_id=clinic_id, **values)
         self.db.add(doctor)
         await self.db.commit()
         await self.db.refresh(doctor)
@@ -42,10 +54,9 @@ class DoctorService:
     def _serialize_doctors(self, docs):
         response = []
         for d in docs:
-            full_name = d.user.full_name if d.user and d.user.full_name else "Doctor"
-            parts = full_name.split()
-            first_name = parts[0] if len(parts) > 0 else "Doctor"
-            last_name = " ".join(parts[1:]) if len(parts) > 1 else ""
+            raw_name = d.user.full_name if d.user and d.user.full_name else "Doctor"
+            first_name, last_name, doctor_display_name = split_doctor_name(raw_name)
+
             user_data = None
             if d.user:
                 user_data = {
@@ -53,10 +64,11 @@ class DoctorService:
                     "email": d.user.email or "",
                     "first_name": first_name,
                     "last_name": last_name,
-                    "full_name": full_name,
-                    "fullName": full_name,
+                    "full_name": doctor_display_name,
+                    "fullName": doctor_display_name,
                     "role": "doctor",
                 }
+            prefix = getattr(d, 'token_prefix', None) or 'A'
             response.append({
                 "id": str(d.id),
                 "clinic_id": str(d.clinic_id),
@@ -67,13 +79,15 @@ class DoctorService:
                 "consultation_fee": d.consultation_fee or 500,
                 "avg_consultation_minutes": d.avg_consultation_minutes or 15,
                 "signature_url": d.signature_url,
+                "token_prefix": prefix,
+                "tokenPrefix": prefix,
                 "is_available": True,
                 "isActive": True,
-                "firstName": full_name,
-                "lastName": "",
-                "fullName": full_name,
-                "full_name": full_name,
-                "name": full_name,
+                "firstName": first_name,
+                "lastName": last_name,
+                "fullName": doctor_display_name,
+                "full_name": doctor_display_name,
+                "name": doctor_display_name,
                 "user": user_data
             })
         return response

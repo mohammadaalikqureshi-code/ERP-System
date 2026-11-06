@@ -39,7 +39,7 @@ import { useDoctors } from '@/api/doctors';
 import { useAdminLiveTokens, useBoostEmergencyToken, useUpdateAppointmentStatus, AdminTokenFilters } from '@/api/appointments';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { Doctor } from '@/types';
-import { cn } from '@/lib/utils';
+import { cn, formatDoctorName } from '@/lib/utils';
 
 export default function TokenControlPage() {
   const navigate = useNavigate();
@@ -220,7 +220,7 @@ export default function TokenControlPage() {
 
           <div class="row">
             <span class="bold">Doctor:</span>
-            <span>Dr. ${docName}</span>
+            <span>${formatDoctorName(docName)}</span>
           </div>
           <div class="row">
             <span class="bold">Department:</span>
@@ -423,7 +423,7 @@ export default function TokenControlPage() {
                   <SelectItem value="all">🏥 All Doctors & Departments</SelectItem>
                   {doctors.map((doc: Doctor) => (
                     <SelectItem key={doc.id} value={doc.id}>
-                      Dr. {doc.firstName} {doc.lastName} ({doc.department || 'OPD'})
+                      {formatDoctorName(doc.fullName || `${doc.firstName} ${doc.lastName || ''}`)} ({doc.department || 'OPD'})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -572,7 +572,7 @@ export default function TokenControlPage() {
                   <div className="p-3 rounded-xl bg-stone-50 dark:bg-stone-900 border border-stone-200/80 dark:border-stone-800 text-xs space-y-1.5">
                     <div className="flex justify-between items-center">
                       <span className="text-stone-500 dark:text-stone-400 font-medium">Consulting Doctor:</span>
-                      <span className="font-bold text-stone-900 dark:text-stone-100 text-sm">Dr. {docName}</span>
+                      <span className="font-bold text-stone-900 dark:text-stone-100 text-sm">{formatDoctorName(docName)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-stone-500 dark:text-stone-400 font-medium">Department & Cabin:</span>

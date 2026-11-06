@@ -27,6 +27,14 @@ _pool_options = (
 
 engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG, **_pool_options)
 
+if settings.DATABASE_URL.startswith("sqlite"):
+    import uuid
+    from sqlalchemy import event
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def register_sqlite_functions(dbapi_connection, connection_record):
+        dbapi_connection.create_function("gen_random_uuid", 0, lambda: str(uuid.uuid4()))
+
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,

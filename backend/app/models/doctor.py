@@ -14,6 +14,7 @@ class Doctor(BaseModel, SoftDeleteMixin):
     avg_consultation_minutes = Column(Integer, default=15)
     signature_url = Column(String, nullable=True)
     is_available = Column(Boolean, default=True)
+    token_prefix = Column(String(10), nullable=True)
 
     user = relationship("User")
     schedules = relationship("DoctorSchedule", back_populates="doctor")

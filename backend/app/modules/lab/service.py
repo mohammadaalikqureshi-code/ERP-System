@@ -11,6 +11,7 @@ from app.models.user import User
 from app.modules.lab.schemas import LabTestCatalogCreate, LabTestCatalogUpdate, LabOrderCreate, LabOrderUpdate, LabResultCreate
 from uuid import UUID
 from datetime import datetime, timezone
+from app.core.utils import split_doctor_name, format_doctor_name
 
 
 def auto_flag_result(value_str: str, test: LabTestCatalog) -> dict:
@@ -100,9 +101,10 @@ class LabService:
             "mobile": order.patient.mobile
         } if order.patient else None
 
-        doctor_name = "Smith"
+        doctor_raw = "Doctor"
         if order.doctor and hasattr(order.doctor, 'user') and order.doctor.user:
-            doctor_name = order.doctor.user.full_name
+            doctor_raw = order.doctor.user.full_name
+        doc_first, doc_last, doc_display = split_doctor_name(doctor_raw)
 
         has_abnormal = any(r.is_abnormal for r in (order.results or []) if r.is_abnormal)
         has_critical = any(
@@ -120,7 +122,12 @@ class LabService:
             "status": order.status,
             "orderDate": str(order.created_at) if hasattr(order, 'created_at') and order.created_at else "2026-08-17T10:00:00Z",
             "patient": patient_dict,
-            "doctor": {"firstName": "Dr.", "lastName": doctor_name},
+            "doctor": {
+                "firstName": doc_first,
+                "lastName": doc_last,
+                "fullName": doc_display,
+                "name": doc_display,
+            },
             "items": items,
             "results": items,
             "hasAbnormal": has_abnormal,

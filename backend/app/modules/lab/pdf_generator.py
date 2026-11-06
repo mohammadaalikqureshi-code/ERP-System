@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
+from app.core.utils import format_doctor_name
 from app.documents.pdf import render_pdf
 from app.documents.templates import lab_report_html
 from app.models.clinic import Clinic
@@ -86,7 +87,7 @@ class LabReportPDFGenerator:
                 "reference": str(order.id)[:8].upper(),
                 "status": order.status,
                 "doctor_name": (
-                    order.doctor.user.full_name if order.doctor and order.doctor.user else None
+                    format_doctor_name(order.doctor.user.full_name) if order.doctor and order.doctor.user else None
                 ),
             },
             results=[

@@ -29,7 +29,7 @@ import { useDoctorTodayAppointments, useStartNextConsultation, useUpdateAppointm
 import { useWebSocket } from '@/hooks/useWebSocket';
 import api from '@/api/client';
 import { Appointment } from '@/types';
-import { cn } from '@/lib/utils';
+import { cn, formatDoctorName } from '@/lib/utils';
 
 export default function DoctorDashboard() {
   const navigate = useNavigate();
@@ -187,7 +187,7 @@ export default function DoctorDashboard() {
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold mt-1.5 tracking-tight text-white">
-            Welcome, Dr. {user?.fullName || 'Doctor'}
+            Welcome, {formatDoctorName(user?.fullName)}
           </h1>
           <p className="text-sm text-teal-200 mt-1 opacity-90">
             {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}

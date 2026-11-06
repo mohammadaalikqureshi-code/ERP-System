@@ -15,6 +15,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from app.modules.notifications.tasks import send_notification_task
+from app.core.utils import split_doctor_name, format_doctor_name, clean_doctor_name
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,41 @@ class AppointmentService:
         max_q = (await self.db.execute(stmt)).scalar()
         return (max_q or 0) + 1
 
+    async def _get_doctor_token_prefix(self, doctor_id: uuid.UUID, clinic_id: uuid.UUID = None) -> str:
+        """
+        Retrieves the doctor's assigned alphabetical token prefix (A, B, C, etc.).
+        If not yet set in the database, automatically assigns the next unused letter
+        for this doctor within the clinic and saves it.
+        """
+        from app.models.doctor import Doctor as DocModel
+        from app.core.utils import index_to_token_prefix
+
+        stmt = select(DocModel).where(DocModel.id == doctor_id)
+        doc = (await self.db.execute(stmt)).scalar_one_or_none()
+        if not doc:
+            return "A"
+        if getattr(doc, 'token_prefix', None) and doc.token_prefix.strip():
+            return doc.token_prefix.strip().upper()
+
+        target_clinic = clinic_id or doc.clinic_id
+        all_docs_stmt = (
+            select(DocModel)
+            .where(DocModel.clinic_id == target_clinic, DocModel.is_deleted == False)
+            .order_by(DocModel.created_at.asc(), DocModel.id.asc())
+        )
+        all_docs = (await self.db.execute(all_docs_stmt)).scalars().all()
+        used = {d.token_prefix.strip().upper() for d in all_docs if getattr(d, 'token_prefix', None)}
+        prefix = "A"
+        for i in range(len(all_docs) + 100):
+            cand = index_to_token_prefix(i)
+            if cand not in used:
+                prefix = cand
+                break
+        doc.token_prefix = prefix
+        await self.db.commit()
+        await self.db.refresh(doc)
+        return prefix
+
     async def create_appointment(self, clinic_id: uuid.UUID, user_id: uuid.UUID, data: AppointmentCreate):
         """Book an appointment and put the patient in the doctor's queue.
 
@@ -132,12 +168,13 @@ class AppointmentService:
             values["department"] = doctor.department if doctor else "General Medicine"
 
         last_error = None
+        token_prefix = await self._get_doctor_token_prefix(data.doctor_id, clinic_id)
         for attempt in range(5):
             queue_num = await self._generate_queue_number(data.doctor_id, data.appointment_date)
             appointment = Appointment(
                 clinic_id=clinic_id,
                 booked_by=user_id,
-                token_number=f"A-{queue_num:03d}",
+                token_number=f"{token_prefix}-{queue_num:03d}",
                 queue_number=queue_num,
                 **values,
             )
@@ -164,10 +201,11 @@ class AppointmentService:
         )
         appointment = (await self.db.execute(stmt_load)).scalar_one()
 
+        doc_raw = appointment.doctor.user.full_name if (appointment.doctor and appointment.doctor.user) else "Doctor"
         send_notification_task.delay(
             str(appointment.patient_id),
             "booking_confirmation",
-            {"date": str(data.appointment_date), "time": str(data.appointment_time), "doctor": "Dr."},
+            {"date": str(data.appointment_date), "time": str(data.appointment_time), "doctor": format_doctor_name(doc_raw)},
         )
         await self._announce(
             clinic_id,
@@ -287,7 +325,8 @@ class AppointmentService:
             logger.warning("Failed to dispatch status change in-app notification", exc_info=True)
 
         if data.status == "cancelled":
-            send_notification_task.delay(str(app.patient_id), "cancelled", {"date": str(app.appointment_date), "time": str(app.appointment_time), "doctor": "Dr."})
+            doc_raw = app.doctor.user.full_name if (app.doctor and app.doctor.user) else "Doctor"
+            send_notification_task.delay(str(app.patient_id), "cancelled", {"date": str(app.appointment_date), "time": str(app.appointment_time), "doctor": format_doctor_name(doc_raw)})
         
         return app
 
@@ -312,12 +351,15 @@ class AppointmentService:
         await self.db.commit()
         await self.db.refresh(app)
         
-        send_notification_task.delay(str(app.patient_id), "rescheduled", {"date": str(data.appointment_date), "time": str(data.appointment_time), "doctor": "Dr."})
+        doc_raw = app.doctor.user.full_name if (app.doctor and app.doctor.user) else "Doctor"
+        send_notification_task.delay(str(app.patient_id), "rescheduled", {"date": str(data.appointment_date), "time": str(data.appointment_time), "doctor": format_doctor_name(doc_raw)})
         await self._announce(clinic_id, Events.APPOINTMENT_RESCHEDULED, app.id)
 
         return app
 
     def _format_appointment(self, apt: Appointment) -> dict:
+        doc_raw = apt.doctor.user.full_name if (apt.doctor and apt.doctor.user) else ""
+        doc_first, doc_last, doc_full = split_doctor_name(doc_raw) if apt.doctor else ("", "", "")
         return {
             "id": str(apt.id),
             "patientId": str(apt.patient_id),
@@ -344,8 +386,10 @@ class AppointmentService:
             "doctor": {
                 "id": str(apt.doctor.id),
                 "userId": str(apt.doctor.user_id),
-                "firstName": apt.doctor.user.full_name if (apt.doctor and apt.doctor.user) else "",
-                "lastName": "",
+                "firstName": doc_first,
+                "lastName": doc_last,
+                "fullName": doc_full,
+                "name": doc_full,
                 "specialization": apt.doctor.specialization if apt.doctor else "",
                 "department": apt.doctor.department if apt.doctor else "",
                 "consultationFee": float(apt.doctor.consultation_fee) if (apt.doctor and apt.doctor.consultation_fee) else 0.0,
@@ -355,6 +399,10 @@ class AppointmentService:
         }
 
     async def get_queue_today(self, clinic_id: uuid.UUID, doctor_id: uuid.UUID = None):
+        if isinstance(clinic_id, str):
+            clinic_id = uuid.UUID(clinic_id)
+        if isinstance(doctor_id, str):
+            doctor_id = uuid.UUID(doctor_id)
         today = datetime.now(timezone.utc).date()
         stmt = select(Appointment).options(
             selectinload(Appointment.patient),
@@ -643,7 +691,8 @@ class AppointmentService:
             raise NotFoundError("Doctor not found")
 
         dept = data.department or doctor.department or "General OPD"
-        doc_full_name = doctor.user.full_name if doctor.user else "Doctor"
+        doc_raw = doctor.user.full_name if doctor.user else "Doctor"
+        doc_full_name = format_doctor_name(doc_raw)
 
         # 3. Check if patient ALREADY has an active token for this doctor today
         existing_apt = (await self.db.execute(
@@ -658,17 +707,18 @@ class AppointmentService:
 
         # IF IT IS EMERGENCY: Allow generating or upgrading token to EMERGENCY priority
         if data.is_emergency:
+            token_prefix = await self._get_doctor_token_prefix(doctor.id, clinic_id)
             if existing_apt:
                 existing_apt.visit_type = "emergency"
                 if not existing_apt.token_number.startswith("EMG"):
-                    existing_apt.token_number = f"EMG-{existing_apt.queue_number:02d}"
+                    existing_apt.token_number = f"EMG-{token_prefix}-{existing_apt.queue_number:02d}"
                 existing_apt.status = "checked_in"
                 await self.db.commit()
                 await self.db.refresh(existing_apt)
                 appointment = existing_apt
             else:
                 queue_num = await self._generate_queue_number(doctor.id, today)
-                token_number = f"EMG-{queue_num:02d}"
+                token_number = f"EMG-{token_prefix}-{queue_num:02d}"
                 now = datetime.now(timezone.utc)
                 appointment = Appointment(
                     clinic_id=clinic_id,
@@ -698,7 +748,7 @@ class AppointmentService:
                 await NotificationService(self.db).create_and_broadcast(
                     clinic_id=clinic_id,
                     title="🚨 CRITICAL EMERGENCY PATIENT ARRIVED",
-                    message=f"Emergency Token #{appointment.token_number} ({patient.full_name}) routed to Dr. {doc_full_name} ({dept}). Please attend immediately!",
+                    message=f"Emergency Token #{appointment.token_number} ({patient.full_name}) routed to {doc_full_name} ({dept}). Please attend immediately!",
                     category="emergency",
                     target_role="doctor",
                     sender_name="Front Desk Reception",
@@ -788,12 +838,12 @@ class AppointmentService:
                     "estimated_wait_minutes": est_wait_mins,
                     "estimated_wait_formatted": f"~{est_wait_mins} mins ({patients_ahead_count} ahead)" if patients_ahead_count > 0 else "Next in line! (0 mins)"
                 },
-                "message": f"Active Token #{existing_apt.token_number} already exists today for {patient.full_name} with Dr. {doc_full_name} (Status: {existing_apt.status.replace('_', ' ').title()}). Duplicate generation blocked."
+                "message": f"Active Token #{existing_apt.token_number} already exists today for {patient.full_name} with {doc_full_name} (Status: {existing_apt.status.replace('_', ' ').title()}). Duplicate generation blocked."
             }
 
         # 4. Calculate queue & generate new regular token
         queue_num = await self._generate_queue_number(doctor.id, today)
-        token_prefix = "A"
+        token_prefix = await self._get_doctor_token_prefix(doctor.id, clinic_id)
         token_number = f"{token_prefix}-{queue_num:03d}"
         now = datetime.now(timezone.utc)
 
@@ -836,7 +886,8 @@ class AppointmentService:
 
         try:
             from app.modules.notifications.service import NotificationService
-            doc_name = f"Dr. {doctor.user.full_name}" if doctor.user else "Doctor"
+            doc_raw = doctor.user.full_name if doctor.user else "Doctor"
+            doc_name = format_doctor_name(doc_raw)
             await NotificationService(self.db).create_and_broadcast(
                 clinic_id=clinic_id,
                 title="New Patient Arrived",
@@ -868,7 +919,7 @@ class AppointmentService:
             },
             "doctor": {
                 "id": str(doctor.id),
-                "full_name": doctor.user.full_name if doctor.user else "Doctor",
+                "full_name": format_doctor_name(doctor.user.full_name if doctor.user else "Doctor"),
                 "department": doctor.department,
                 "specialization": doctor.specialization,
                 "consultation_fee": float(doctor.consultation_fee) if doctor.consultation_fee else 500.0,
@@ -983,7 +1034,10 @@ class AppointmentService:
                 } if a.patient else None,
                 "doctor": {
                     "id": str(a.doctor.id) if a.doctor else None,
-                    "full_name": doc_user.full_name if doc_user else "Doctor OPD",
+                    "full_name": format_doctor_name(doc_user.full_name) if doc_user else "Doctor OPD",
+                    "fullName": format_doctor_name(doc_user.full_name) if doc_user else "Doctor OPD",
+                    "firstName": split_doctor_name(doc_user.full_name)[0] if doc_user else "Doctor",
+                    "lastName": split_doctor_name(doc_user.full_name)[1] if doc_user else "",
                     "department": a.doctor.department if a.doctor else "OPD",
                     "specialization": a.doctor.specialization if a.doctor else "Consultant",
                     "consultation_fee": float(a.doctor.consultation_fee) if a.doctor and a.doctor.consultation_fee else 500.0,
@@ -1021,8 +1075,9 @@ class AppointmentService:
             raise NotFoundError("Appointment not found")
 
         apt.visit_type = "emergency"
+        token_prefix = await self._get_doctor_token_prefix(apt.doctor_id, clinic_id)
         if not apt.token_number.startswith("EMG"):
-            apt.token_number = f"EMG-{apt.queue_number:02d}"
+            apt.token_number = f"EMG-{token_prefix}-{apt.queue_number:02d}"
         apt.status = "checked_in"
         await self.db.commit()
         await self.db.refresh(apt)

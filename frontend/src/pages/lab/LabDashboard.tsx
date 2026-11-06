@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { downloadFile } from '@/lib/download';
+import { formatDoctorName } from '@/lib/utils';
 import { 
   Dialog,
   DialogContent,
@@ -197,7 +198,7 @@ export default function LabDashboard() {
                           <div className="font-medium">{order.patient?.firstName} {order.patient?.lastName}</div>
                           <div className="text-xs text-muted-foreground">{order.patient?.patientCode} • {order.patient?.mobile}</div>
                         </TableCell>
-                        <TableCell className="text-sm">Dr. {order.doctor?.lastName}</TableCell>
+                        <TableCell className="text-sm">{formatDoctorName(order.doctor?.lastName || order.doctor?.name || order.doctor?.fullName)}</TableCell>
                         <TableCell>
                           <div className="space-y-1">
                             <div className="text-xs font-medium">{order.items?.length || 0} Test(s)</div>
@@ -448,7 +449,7 @@ function ResultEntryModal({
                 <span>Pathology & Diagnostic Result Entry</span>
               </DialogTitle>
               <DialogDescription className="text-xs text-stone-500 mt-1">
-                Order ID: <strong>{order.id.substring(0, 8).toUpperCase()}</strong> • Patient: <strong>{order.patient?.firstName} {order.patient?.lastName}</strong> ({order.patient?.patientCode || 'PT-OPD'}) • Ref by: <strong>Dr. {order.doctor?.lastName || 'OPD'}</strong>
+                Order ID: <strong>{order.id.substring(0, 8).toUpperCase()}</strong> • Patient: <strong>{order.patient?.firstName} {order.patient?.lastName}</strong> ({order.patient?.patientCode || 'PT-OPD'}) • Ref by: <strong>{formatDoctorName(order.doctor?.lastName || order.doctor?.name || 'OPD')}</strong>
               </DialogDescription>
             </div>
             <Button
@@ -682,7 +683,7 @@ function NewLabOrderModal({
               <option value="">-- OPD General Walk-in / Self --</option>
               {doctors.map((d: any) => (
                 <option key={d.id} value={d.id}>
-                  Dr. {d.name || d.user?.fullName || d.user?.full_name || `${d.firstName || ''} ${d.lastName || ''}`} ({d.specialization || d.department || 'Doctor'})
+                  {formatDoctorName(d.name || d.user?.fullName || d.user?.full_name || `${d.firstName || ''} ${d.lastName || ''}`)} ({d.specialization || d.department || 'Doctor'})
                 </option>
               ))}
             </select>

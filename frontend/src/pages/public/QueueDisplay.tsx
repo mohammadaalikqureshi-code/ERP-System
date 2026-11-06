@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useQueueSocket } from '@/hooks/useQueueSocket';
 import api from '@/api/client';
 import { AlertTriangle, Bell, Clock, Stethoscope, User, Volume2, VolumeX, ShieldAlert, Sparkles } from 'lucide-react';
+import { cleanDoctorName, formatDoctorName } from '@/lib/utils';
 
 export default function QueueDisplay() {
   const [searchParams] = useSearchParams();
@@ -230,7 +231,7 @@ export default function QueueDisplay() {
       emergencyActiveRef.current = true;
       const token = currentEmergencyToken || 'EMG-01';
       const patientName = emergencyData.patient_name || emergencyData.patientName || 'Emergency Patient';
-      const doc = emergencyData.doctor_name || emergencyData.doctorName || 'Doctor';
+      const doc = cleanDoctorName(emergencyData.doctor_name || emergencyData.doctorName) || 'Doctor';
       const dept = emergencyData.department || 'Emergency OPD Consultation Room';
 
       const enEmergency = `Attention please. Critical Emergency Call. Patient ${patientName}, Token ${token.split('').join(' ')}, please proceed immediately to ${dept} for Doctor ${doc}.`;
@@ -292,7 +293,7 @@ export default function QueueDisplay() {
       lastAnnouncedToken.current = currentToken;
       const dept = current?.department || 'OPD';
       const room = current?.department ? `${current.department} Consultation Room` : 'the consultation room';
-      const docName = current?.doctor_name || current?.doctorName || '';
+      const docName = cleanDoctorName(current?.doctor_name || current?.doctorName);
       const patName = current?.patient_name || current?.patientName || '';
 
       const spelledToken = currentToken.split('').join(' ');
@@ -374,7 +375,7 @@ export default function QueueDisplay() {
                 Patient: <span className="text-amber-200 underline decoration-amber-300">{emergencyData.patient_name || emergencyData.patientName}</span>
               </div>
               <div className="text-sm md:text-base font-bold text-white mt-0.5 opacity-95">
-                Proceed directly to <strong>{emergencyData.department}</strong> • Cabin 101 for <strong>Dr. {emergencyData.doctor_name || emergencyData.doctorName}</strong>
+                Proceed directly to <strong>{emergencyData.department}</strong> • Cabin 101 for <strong>{formatDoctorName(emergencyData.doctor_name || emergencyData.doctorName)}</strong>
               </div>
             </div>
           </div>
@@ -429,7 +430,7 @@ export default function QueueDisplay() {
             onClick={() => {
               setHasInteracted(true);
               const token = currentToken !== '--' && currentToken !== '...' ? currentToken : 'A-001';
-              const doc = doctorName || 'Vikram Nair';
+              const doc = cleanDoctorName(doctorName) || 'Vikram Nair';
               const en = `Attention please. Token ${token.split('').join(' ')}, please proceed to Orthopaedics Consultation Room for Doctor ${doc}.`;
               const hi = `कृपया ध्यान दें। टोकन नंबर ${token.split('').join(' ')}, कृपया Orthopaedics परामर्श कक्ष, डॉक्टर ${doc} के पास जाएं।`;
               speakBilingual(en, hi, false);
@@ -463,7 +464,7 @@ export default function QueueDisplay() {
             setHasInteracted(true);
             playChime();
             const token = currentToken !== '--' && currentToken !== '...' ? currentToken : 'A-001';
-            const doc = doctorName || 'Vikram Nair';
+            const doc = cleanDoctorName(doctorName) || 'Vikram Nair';
             const en = `Attention please. Token ${token.split('').join(' ')}, please proceed to Orthopaedics Consultation Room for Doctor ${doc}.`;
             const hi = `कृपया ध्यान दें। टोकन नंबर ${token.split('').join(' ')}, कृपया Orthopaedics परामर्श कक्ष, डॉक्टर ${doc} के पास जाएं।`;
             speakBilingual(en, hi, false);
@@ -514,7 +515,7 @@ export default function QueueDisplay() {
                 </div>
               )}
               <div className="text-2xl md:text-3xl font-black text-stone-100">
-                {doctorName ? `Dr. ${doctorName}` : 'Doctor OPD'}
+                {doctorName ? formatDoctorName(doctorName) : 'Doctor OPD'}
               </div>
               <div className={`inline-block px-4 py-1.5 rounded-full text-xs md:text-sm font-black uppercase tracking-wider border ${
                 isCurrentEmergency
@@ -600,7 +601,7 @@ export default function QueueDisplay() {
                       <div className={`font-bold text-xs ${
                         isEmergencyItem ? 'text-white font-black' : 'text-teal-400 font-semibold'
                       }`}>
-                        {doc ? `Dr. ${doc}` : 'OPD'}
+                        {doc && doc !== 'OPD' ? formatDoctorName(doc) : 'OPD'}
                       </div>
                     </div>
                   </div>

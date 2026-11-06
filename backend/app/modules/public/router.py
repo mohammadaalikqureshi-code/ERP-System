@@ -21,6 +21,7 @@ from app.core.database import get_db
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.redis import get_redis
 from app.core.security import get_password_hash
+from app.core.utils import format_doctor_name
 from app.middleware.rate_limit import rate_limiter
 from app.models.appointment import Appointment
 from app.models.billing import Bill
@@ -95,7 +96,7 @@ async def public_queue(
 
     def doctor_name(appointment: Appointment) -> Optional[str]:
         if appointment.doctor and appointment.doctor.user:
-            return appointment.doctor.user.full_name
+            return format_doctor_name(appointment.doctor.user.full_name)
         return None
 
     current = next((a for a in appointments if a.status == "in_consultation"), None)
@@ -348,7 +349,7 @@ async def search_patient_reports(
             "orderNumber": f"LAB-{str(order.id)[:8].upper()}",
             "orderDate": order.created_at.isoformat() if order.created_at else None,
             "status": order.status,
-            "doctorName": order.doctor.user.full_name if order.doctor and order.doctor.user else "Attending Physician",
+            "doctorName": format_doctor_name(order.doctor.user.full_name) if order.doctor and order.doctor.user else "Attending Physician",
             "hasAbnormal": has_abnormal,
             "hasCritical": has_critical,
             "testsCount": len(order.results),
@@ -387,7 +388,7 @@ async def search_patient_reports(
             "id": str(rx.id),
             "rxNumber": f"RX-{str(rx.id)[:8].upper()}",
             "date": rx.created_at.isoformat() if rx.created_at else None,
-            "doctorName": rx.doctor.user.full_name if rx.doctor and rx.doctor.user else "Consultant Doctor",
+            "doctorName": format_doctor_name(rx.doctor.user.full_name) if rx.doctor and rx.doctor.user else "Consultant Doctor",
             "department": rx.doctor.department if rx.doctor else "General OPD",
             "notes": rx.notes or "",
             "medicines": medicines_data,
@@ -438,7 +439,7 @@ async def search_patient_reports(
             "tokenNumber": a.token_number,
             "appointmentDate": a.appointment_date.isoformat() if a.appointment_date else None,
             "department": a.department,
-            "doctorName": a.doctor.user.full_name if a.doctor and a.doctor.user else "Consultant",
+            "doctorName": format_doctor_name(a.doctor.user.full_name) if a.doctor and a.doctor.user else "Consultant",
             "status": a.status,
             "queueNumber": a.queue_number,
         })

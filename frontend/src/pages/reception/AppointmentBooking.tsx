@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { motion, AnimatePresence } from 'framer-motion';
 import { appointmentCreateSchema } from '@/lib/validations';
 import { useCreateAppointment, useQuickWalkinAppointment } from '@/api/appointments';
 import { useDoctors, useAvailableSlots } from '@/api/doctors';
@@ -33,9 +34,18 @@ import {
   ArrowRight,
   ShieldCheck,
   RefreshCw,
-  QrCode
+  QrCode,
+  Flame,
+  Check,
+  ChevronRight,
+  CalendarDays,
+  Building2,
+  BadgePercent,
+  CheckCheck,
+  Tag
 } from 'lucide-react';
 import { Patient, Doctor } from '@/types';
+import { cleanDoctorName, formatDoctorName } from '@/lib/utils';
 
 type BookingFormValues = z.infer<typeof appointmentCreateSchema>;
 
@@ -46,10 +56,11 @@ export const getDoctorDisplayName = (doc: any): string => {
     doc.user?.full_name ||
     doc.fullName ||
     doc.full_name ||
+    doc.name ||
     (doc.firstName && doc.firstName !== 'Doctor' ? `${doc.firstName} ${doc.lastName || ''}`.trim() : '') ||
     (doc.user ? `${doc.user.firstName || doc.user.first_name || ''} ${doc.user.lastName || doc.user.last_name || ''}`.trim() : '') ||
     (doc.department ? `${doc.department} Specialist` : 'Doctor');
-  return raw.replace(/^Dr\.?\s*/i, '').trim() || 'Doctor';
+  return cleanDoctorName(raw) || 'Doctor';
 };
 
 const AppointmentBookingContent = () => {
@@ -125,13 +136,13 @@ const AppointmentBookingContent = () => {
       if (res.isDuplicatePrevented || res.is_duplicate_prevented) {
         toast({
           title: `⚠️ Active Token #${res.tokenNumber || res.token_number} Already Exists!`,
-          description: `Patient already in queue for Dr. ${res.doctor?.fullName || 'Doctor'} today. Duplicate token creation blocked.`,
+          description: `Patient already in queue for ${formatDoctorName(res.doctor?.fullName || res.doctor?.name)} today. Duplicate token creation blocked.`,
           variant: "warning",
         });
       } else {
         toast({
           title: `🎟️ Token #${res.tokenNumber || res.token_number} Generated!`,
-          description: `Added to Dr. ${res.doctor?.fullName || 'Doctor'}'s live queue (${res.queueStats?.estimatedWaitFormatted || ''}).`,
+          description: `Added to ${formatDoctorName(res.doctor?.fullName || res.doctor?.name)}'s live queue (${res.queueStats?.estimatedWaitFormatted || ''}).`,
           variant: "success",
         });
       }
@@ -269,7 +280,7 @@ const AppointmentBookingContent = () => {
           <div class="details">
             <div class="row"><span>Patient:</span> <span>${patientName}</span></div>
             <div class="row"><span>Patient ID:</span> <span>${patientCode}</span></div>
-            <div class="row"><span>Doctor:</span> <span>Dr. ${doctorName}</span></div>
+            <div class="row"><span>Doctor:</span> <span>${formatDoctorName(doctorName)}</span></div>
             <div class="row"><span>Department:</span> <span>${dept}</span></div>
             <div class="row"><span>Consultation Cabin:</span> <span>${room}</span></div>
             <div class="row"><span>OPD Fee:</span> <span>Rs. ${fee}</span></div>
@@ -327,12 +338,32 @@ const AppointmentBookingContent = () => {
   const advSelectedDoctorId = form.watch('doctorId');
   const advSelectedDate = form.watch('appointmentDate');
   const advSelectedPatientId = form.watch('patientId');
+  const advSelectedTime = form.watch('appointmentTime');
+  const advSelectedVisitType = form.watch('visitType');
+
   const advSelectedPatient = advancePatients?.find((p: any) => p.id === advSelectedPatientId);
-  const { data: slots } = useAvailableSlots(advSelectedDoctorId, advSelectedDate);
+  const advSelectedDoctor = doctors.find((d: any) => d.id === advSelectedDoctorId);
+  const { data: slots, isLoading: loadingSlots } = useAvailableSlots(advSelectedDoctorId, advSelectedDate);
+
+  // Available slots logic with sensible fallbacks
+  const availableSlotsList = useMemo(() => {
+    if (slots && slots.length > 0) {
+      return slots.map(s => typeof s === 'string' ? { time: s, isAvailable: true } : s);
+    }
+    const defaultTimes = [
+      '09:00', '09:20', '09:40', '10:00', '10:20', '10:40',
+      '11:00', '11:20', '11:40', '12:00', '16:00', '16:20',
+      '16:40', '17:00', '17:20', '17:40', '18:00'
+    ];
+    return defaultTimes.map(t => ({ time: t, isAvailable: true }));
+  }, [slots]);
+
+  const [bookingResult, setBookingResult] = useState<any>(null);
 
   const onAdvanceSubmit = async (data: BookingFormValues) => {
     try {
       const result = await createAppointment(data);
+      setBookingResult(result);
       toast({
         title: "Appointment Scheduled",
         description: `Token Number: ${result.tokenNumber}`,
@@ -349,445 +380,859 @@ const AppointmentBookingContent = () => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b">
         <PageHeader
-          title="Front Desk Token & Appointment Desk"
-          description="High-speed walk-in token generation, real-time queue assignment, and advance bookings."
+          title="Patient Intake & Appointment Hub"
+          description="High-speed walk-in queue token dispensing, smart returning patient auto-detection, and advance slot scheduling."
         />
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={() => navigate('/reception/queue')}
-            className="text-xs gap-1.5"
+            className="text-xs gap-1.5 rounded-xl border-teal-600/30 hover:bg-teal-50 dark:hover:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold"
           >
             <Clock className="w-3.5 h-3.5 text-teal-600" />
-            Live Queue Monitor
+            Live Queue Board
           </Button>
         </div>
       </div>
 
-      {/* Main Tabs */}
+      {/* Main Tabs Navigation */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md bg-muted/80 p-1">
-          <TabsTrigger value="express" className="gap-2 text-xs font-bold py-2">
-            <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
-            ⚡ Express Walk-in Token (5s)
-          </TabsTrigger>
-          <TabsTrigger value="advance" className="gap-2 text-xs font-bold py-2">
-            <Calendar className="w-4 h-4 text-blue-500" />
-            📅 Advance Slot Booking
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <TabsList className="grid grid-cols-2 w-full max-w-md p-1 rounded-2xl bg-muted/70 backdrop-blur-md">
+            <TabsTrigger
+              value="express"
+              className="gap-2 text-xs font-bold py-2.5 rounded-xl data-[state=active]:bg-card data-[state=active]:text-teal-700 dark:data-[state=active]:text-teal-300 data-[state=active]:shadow-sm transition-all"
+            >
+              <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
+              ⚡ Express Walk-in (5s)
+            </TabsTrigger>
+            <TabsTrigger
+              value="advance"
+              className="gap-2 text-xs font-bold py-2.5 rounded-xl data-[state=active]:bg-card data-[state=active]:text-blue-700 dark:data-[state=active]:text-blue-300 data-[state=active]:shadow-sm transition-all"
+            >
+              <Calendar className="w-4 h-4 text-blue-500" />
+              📅 Advance Slot Booking
+            </TabsTrigger>
+          </TabsList>
+
+          <div className="hidden md:flex items-center gap-2 text-[11px] text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-full border">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
+            <span>OPD Registry Live: <strong>{doctors.length} Doctors Available</strong></span>
+          </div>
+        </div>
 
         {/* ================================================================= */}
-        {/* TAB 1: ⚡ EXPRESS WALK-IN TOKEN (THE #1 BEST WAY) */}
+        {/* TAB 1: ⚡ EXPRESS WALK-IN TOKEN */}
         {/* ================================================================= */}
-        <TabsContent value="express" className="space-y-6 pt-4">
-          {generatedSlip ? (
-            /* PRINTABLE THERMAL TOKEN SLIP CARD */
-            <div className="max-w-md mx-auto space-y-4 animate-in zoom-in-95">
-              <Card className="border-2 border-teal-600/60 shadow-2xl bg-card overflow-hidden">
-                <div className={`p-4 text-white text-center space-y-1 ${
-                  (generatedSlip.isEmergency || generatedSlip.is_emergency) ? 'bg-red-600' : 'bg-teal-600'
-                }`}>
-                  <div className="text-xs uppercase tracking-widest font-bold opacity-90">Sanjeevani Multi-Specialty Hospital</div>
-                  <div className="text-sm font-semibold">
-                    {(generatedSlip.isEmergency || generatedSlip.is_emergency) ? '🚨 CRITICAL EMERGENCY TOKEN' : 'OPD Patient Token Receipt'}
-                  </div>
-                  {(generatedSlip.isEmergency || generatedSlip.is_emergency) && (
-                    <div className="mt-2 py-1 px-2.5 rounded-lg bg-black/40 text-amber-300 font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Priority 1: Continuous Voice Calling Active on TV Board
+        <TabsContent value="express" className="space-y-6 pt-1 focus-visible:outline-none">
+          <AnimatePresence mode="wait">
+            {generatedSlip ? (
+              /* REALISTIC THERMAL PRINT TOKEN SLIP */
+              <motion.div
+                key="slip"
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                className="max-w-md mx-auto space-y-4"
+              >
+                <Card className="border-2 border-teal-600/70 shadow-2xl bg-card overflow-hidden rounded-3xl relative">
+                  {/* Emergency Siren or Regular Header */}
+                  <div
+                    className={`p-4 text-white text-center space-y-1 relative overflow-hidden ${
+                      generatedSlip.isEmergency || generatedSlip.is_emergency
+                        ? 'bg-gradient-to-r from-rose-600 to-red-700'
+                        : 'bg-gradient-to-r from-teal-600 to-emerald-700'
+                    }`}
+                  >
+                    <div className="text-[10px] uppercase tracking-widest font-extrabold opacity-90">
+                      Sanjeevani Multi-Specialty Hospital
                     </div>
-                  )}
-                  {(generatedSlip.isDuplicatePrevented || generatedSlip.is_duplicate_prevented) && (
-                    <div className="mt-2 py-1 px-2.5 rounded-lg bg-amber-400 text-stone-950 font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Patient Already Holds Active Token (Duplicate Creation Blocked)
+                    <div className="text-sm font-black flex items-center justify-center gap-1.5">
+                      {generatedSlip.isEmergency || generatedSlip.is_emergency ? (
+                        <>
+                          <AlertTriangle className="w-4 h-4 animate-bounce" />
+                          🚨 CRITICAL EMERGENCY TOKEN
+                        </>
+                      ) : (
+                        'OPD Patient Queue Slip'
+                      )}
                     </div>
-                  )}
-                </div>
 
-                <CardContent className="p-6 text-center space-y-4">
-                  <div className="py-2 border-b">
-                    <div className="text-xs uppercase tracking-widest text-muted-foreground font-semibold">Your Token Number</div>
-                    <div className="text-6xl font-black font-mono text-teal-600 tracking-tight my-1">
-                      {generatedSlip.tokenNumber}
-                    </div>
-                    <div className="inline-block px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 font-semibold text-xs border border-teal-200">
-                      {generatedSlip.queueStats.estimatedWaitFormatted}
-                    </div>
-                  </div>
-
-                  <div className="text-left text-xs space-y-2 py-2 border-b">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Patient:</span>
-                      <span className="font-bold">{generatedSlip.patient.fullName} ({generatedSlip.patient.patientCode})</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Doctor:</span>
-                      <span className="font-bold text-foreground">Dr. {generatedSlip.doctor.fullName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Department & Room:</span>
-                      <span className="font-semibold">{generatedSlip.doctor.department} • {generatedSlip.doctor.room}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Consultation Fee:</span>
-                      <span className="font-mono font-bold text-emerald-600">₹{generatedSlip.doctor.consultationFee}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Date & Time:</span>
-                      <span>{generatedSlip.appointmentDate} • {generatedSlip.appointmentTime}</span>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-muted/40 rounded-xl text-[11px] text-muted-foreground space-y-1">
-                    <div>Please proceed to the <strong>OPD Waiting Lounge</strong>.</div>
-                    <div>Your token will be announced automatically on the TV screen.</div>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-2">
-                    <Button onClick={handlePrintSlip} className="flex-1 bg-stone-900 text-white gap-2 text-xs h-9">
-                      <Printer className="w-3.5 h-3.5" /> Print Token Slip
-                    </Button>
-                    <Button onClick={handleResetExpress} variant="outline" className="flex-1 gap-2 text-xs h-9">
-                      <RefreshCw className="w-3.5 h-3.5" /> Next Patient (ESC)
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          ) : (
-            /* EXPRESS GENERATOR FORM */
-            <form onSubmit={handleQuickTokenSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* LEFT: Patient Mobile & Quick Info */}
-              <Card className="lg:col-span-1 border shadow-sm h-fit">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <User className="w-4 h-4 text-teal-600" />
-                    1. Patient Details
-                  </CardTitle>
-                  <CardDescription className="text-xs">Type mobile to auto-fill returning records</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 text-xs">
-                  {/* Mobile Input */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="mobile" className="font-semibold flex items-center justify-between">
-                      <span>Mobile Number (10 Digits) *</span>
-                      {isSearchingMobile && <span className="text-[10px] text-muted-foreground animate-pulse">Checking...</span>}
-                    </Label>
-                    <div className="relative">
-                      <Phone className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-2.5" />
-                      <Input
-                        id="mobile"
-                        type="tel"
-                        placeholder="e.g. 9876543210"
-                        className="pl-9 font-mono text-sm h-9"
-                        value={mobile}
-                        onChange={(e) => setMobile(e.target.value)}
-                        maxLength={10}
-                        required
-                        autoFocus
-                      />
-                    </div>
-                  </div>
-
-                  {/* Returning Patient Found Banner */}
-                  {existingPatient && (
-                    <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 space-y-1">
-                      <div className="flex items-center gap-1.5 font-bold text-xs">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        Returning Patient Verified!
-                      </div>
-                      <div className="font-semibold">{existingPatient.fullName} ({existingPatient.patientCode})</div>
-                      <div className="text-[11px] opacity-80">{existingPatient.age || 42} Y • {existingPatient.gender} • Blood: {existingPatient.bloodGroup || 'O+'}</div>
-                    </div>
-                  )}
-
-                  {/* Patient Name */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="fullName">Full Name *</Label>
-                    <Input
-                      id="fullName"
-                      placeholder="e.g. Rajesh Kumar Verma"
-                      className="h-8 text-xs"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  {/* Age & Gender */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="age">Age (Years)</Label>
-                      <Input
-                        id="age"
-                        type="number"
-                        placeholder="35"
-                        className="h-8 text-xs font-mono"
-                        value={age}
-                        onChange={(e) => setAge(e.target.value ? Number(e.target.value) : '')}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="gender">Gender</Label>
-                      <Select value={gender} onValueChange={setGender}>
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="male">Male</SelectItem>
-                          <SelectItem value="female">Female</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* Blood Group */}
-                  <div className="space-y-1">
-                    <Label htmlFor="blood">Blood Group</Label>
-                    <Select value={bloodGroup} onValueChange={setBloodGroup}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(b => (
-                          <SelectItem key={b} value={b}>{b}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* RIGHT: Doctor & Priority Selector */}
-              <div className="lg:col-span-2 space-y-6">
-                <Card className="border shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center justify-between">
-                      <span className="flex items-center gap-2">
-                        <Stethoscope className="w-4 h-4 text-teal-600" />
-                        2. Select Consulting Doctor & Department
-                      </span>
-                      <span className="text-xs font-normal text-muted-foreground">{doctors.length} Doctors on Duty</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {loadingDoctors ? (
-                      <div className="p-8 text-center text-xs text-muted-foreground">Loading active doctors...</div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {doctors.map((doc: any) => {
-                          const isSelected = selectedDoctorId === doc.id;
-                          const name = getDoctorDisplayName(doc);
-                          const fee = doc.consultationFee || 500;
-                          const dept = doc.department || 'General OPD';
-
-                          return (
-                            <div
-                              key={doc.id}
-                              onClick={() => setSelectedDoctorId(doc.id)}
-                              className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
-                                isSelected
-                                  ? 'border-teal-600 bg-teal-50/50 dark:bg-teal-950/30 shadow-md ring-2 ring-teal-600/20'
-                                  : 'border-muted hover:border-muted-foreground/30 bg-card'
-                              }`}
-                            >
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <div className="font-bold text-sm text-foreground">Dr. {name}</div>
-                                  <div className="text-xs font-semibold text-teal-700 dark:text-teal-400">{dept}</div>
-                                  <div className="text-[11px] text-muted-foreground">{doc.specialization || 'Consultant'}</div>
-                                </div>
-                                <span className="font-mono font-bold text-xs px-2 py-0.5 rounded-md bg-muted text-foreground">
-                                  ₹{fee}
-                                </span>
-                              </div>
-
-                              <div className="mt-3 pt-2 border-t border-muted/80 flex items-center justify-between text-[10px] text-muted-foreground">
-                                <span>Cabin 101</span>
-                                <span className="text-emerald-600 font-semibold flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-                                  Available Now
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
+                    {(generatedSlip.isEmergency || generatedSlip.is_emergency) && (
+                      <div className="mt-2 py-1 px-3 rounded-lg bg-black/40 text-amber-300 font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm">
+                        <Flame className="w-3.5 h-3.5 fill-current" />
+                        Priority 1: Front-of-Line Doctor Alert Broadcasted
                       </div>
                     )}
 
-                    {/* Priority & Emergency Check */}
-                    <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-xl border bg-muted/20">
-                      <div className="space-y-0.5">
-                        <div className="font-semibold text-xs flex items-center gap-1.5">
-                          <AlertTriangle className={`w-3.5 h-3.5 ${isEmergency ? 'text-rose-600' : 'text-amber-500'}`} />
-                          Emergency / Critical Case?
-                        </div>
-                        <div className="text-[11px] text-muted-foreground">
-                          Jumps patient to Token #1 ahead of regular queue with immediate doctor notification.
-                        </div>
+                    {(generatedSlip.isDuplicatePrevented || generatedSlip.is_duplicate_prevented) && (
+                      <div className="mt-2 py-1 px-3 rounded-lg bg-amber-400 text-stone-950 font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        Active Queue Token Retained (Duplicate Prevented)
                       </div>
-                      <Button
-                        type="button"
-                        variant={isEmergency ? "destructive" : "outline"}
-                        size="sm"
-                        onClick={() => setIsEmergency(!isEmergency)}
-                        className="text-xs h-8 shrink-0 font-bold"
-                      >
-                        {isEmergency ? '🚨 EMERGENCY ACTIVE' : 'Mark as Emergency'}
-                      </Button>
+                    )}
+                  </div>
+
+                  <CardContent className="p-6 text-center space-y-4">
+                    {/* Token Number Box with animated glow */}
+                    <div className="py-3 border-b border-dashed border-border/80">
+                      <div className="text-xs uppercase tracking-widest text-muted-foreground font-semibold">
+                        Allocated Token Number
+                      </div>
+                      <div className="text-6xl font-black font-mono text-teal-600 dark:text-teal-400 tracking-tight my-2 animate-token-glow">
+                        {generatedSlip.tokenNumber || generatedSlip.token_number}
+                      </div>
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/70 text-teal-700 dark:text-teal-300 font-semibold text-xs border border-teal-200/60 shadow-xs">
+                        <Clock className="w-3.5 h-3.5" />
+                        {generatedSlip.queueStats?.estimatedWaitFormatted || 'Next in Line'}
+                      </div>
                     </div>
 
-                    {/* Submit Bar */}
-                    <div className="pt-2 flex items-center gap-3">
+                    {/* Receipt Details Grid */}
+                    <div className="text-left text-xs space-y-2 py-3 border-b border-dashed border-border/80 bg-muted/20 p-3 rounded-2xl">
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Patient:</span>
+                        <span className="font-bold text-foreground">
+                          {generatedSlip.patient?.fullName || generatedSlip.patient?.full_name} ({generatedSlip.patient?.patientCode || generatedSlip.patient?.patient_code})
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Consulting Doctor:</span>
+                        <span className="font-bold text-teal-700 dark:text-teal-400">
+                          {formatDoctorName(generatedSlip.doctor?.fullName || generatedSlip.doctor?.name)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Department & Cabin:</span>
+                        <span className="font-semibold text-foreground">
+                          {generatedSlip.doctor?.department} • {generatedSlip.doctor?.room || 'Cabin 101'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Consultation Fee:</span>
+                        <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                          ₹{generatedSlip.doctor?.consultationFee || 500}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Date & Slot:</span>
+                        <span className="font-mono text-[11px] text-muted-foreground">
+                          {generatedSlip.appointmentDate} • {generatedSlip.appointmentTime || 'Walk-in'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Instruction Box */}
+                    <div className="p-3 bg-muted/40 rounded-2xl text-[11px] text-muted-foreground space-y-1 text-center border border-border/40">
+                      <div>Please proceed to the <strong>OPD Waiting Area</strong>.</div>
+                      <div>Your token will chime automatically on the central TV screen.</div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2.5 pt-2">
                       <Button
-                        type="submit"
-                        disabled={quickWalkinMutation.isPending}
-                        className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold h-11 text-sm shadow-lg gap-2"
+                        onClick={handlePrintSlip}
+                        className="flex-1 bg-stone-900 hover:bg-stone-800 text-white font-bold gap-2 text-xs h-10 rounded-xl shadow-md"
                       >
-                        {quickWalkinMutation.isPending ? (
-                          <>
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                            Allocating Token in Live Queue...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4 text-amber-300" />
-                            ⚡ Generate Live Token & Print Receipt (Enter)
-                            <ArrowRight className="w-4 h-4" />
-                          </>
-                        )}
+                        <Printer className="w-4 h-4" /> Print Thermal Slip
+                      </Button>
+                      <Button
+                        onClick={handleResetExpress}
+                        variant="outline"
+                        className="flex-1 gap-2 text-xs h-10 rounded-xl border-dashed"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> Next Patient (ESC)
                       </Button>
                     </div>
                   </CardContent>
                 </Card>
-              </div>
-            </form>
-          )}
+              </motion.div>
+            ) : (
+              /* EXPRESS REGISTRATION FORM */
+              <motion.form
+                key="form"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                onSubmit={handleQuickTokenSubmit}
+                className="grid grid-cols-1 lg:grid-cols-12 gap-6"
+              >
+                {/* LEFT COLUMN: Patient Identification (5 cols) */}
+                <div className="lg:col-span-5 space-y-4">
+                  <Card className="border shadow-sm rounded-3xl overflow-hidden bg-card/80 backdrop-blur-sm">
+                    <CardHeader className="pb-3 border-b bg-muted/30">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-bold flex items-center gap-2">
+                          <User className="w-4 h-4 text-teal-600" />
+                          Step 1: Patient Identity
+                        </CardTitle>
+                        <span className="text-[10px] font-mono bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 px-2 py-0.5 rounded-full font-bold">
+                          ⚡ 5s Express
+                        </span>
+                      </div>
+                      <CardDescription className="text-xs">
+                        Enter 10-digit mobile number for instant profile lookup
+                      </CardDescription>
+                    </CardHeader>
+
+                    <CardContent className="space-y-4 pt-4 text-xs">
+                      {/* Mobile Input with Real-time Check */}
+                      <div className="space-y-1.5">
+                        <Label htmlFor="mobile" className="font-semibold flex items-center justify-between">
+                          <span>Mobile Number *</span>
+                          {isSearchingMobile ? (
+                            <span className="text-[10px] text-teal-600 animate-pulse font-medium">
+                              Searching registry...
+                            </span>
+                          ) : mobile.length === 10 ? (
+                            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Valid Mobile
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">10 digits required</span>
+                          )}
+                        </Label>
+                        <div className="relative">
+                          <Phone className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
+                          <Input
+                            id="mobile"
+                            type="tel"
+                            placeholder="e.g. 9876543210"
+                            className="pl-9 font-mono text-sm h-10 rounded-xl border-border/80 focus:ring-teal-500"
+                            value={mobile}
+                            onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                            maxLength={10}
+                            required
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+
+                      {/* Returning Patient Found Banner */}
+                      <AnimatePresence>
+                        {existingPatient && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200 space-y-1 overflow-hidden"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="flex items-center gap-1.5 font-bold text-xs text-emerald-700 dark:text-emerald-300">
+                                <ShieldCheck className="w-4 h-4" /> Returning Patient Verified!
+                              </span>
+                              <span className="font-mono text-[10px] bg-emerald-200/60 dark:bg-emerald-900/60 px-1.5 py-0.5 rounded text-emerald-800 dark:text-emerald-200 font-bold">
+                                {existingPatient.patientCode}
+                              </span>
+                            </div>
+                            <div className="font-bold text-foreground text-sm pt-0.5">
+                              {existingPatient.fullName || `${existingPatient.firstName || ''} ${existingPatient.lastName || ''}`}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground flex gap-2">
+                              <span>Age: {existingPatient.age || 42} Y</span>
+                              <span>•</span>
+                              <span>Gender: {existingPatient.gender}</span>
+                              <span>•</span>
+                              <span>Blood: {existingPatient.bloodGroup || 'O+'}</span>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      {/* Full Name Input */}
+                      <div className="space-y-1.5">
+                        <Label htmlFor="fullName" className="font-semibold">Patient Full Name *</Label>
+                        <Input
+                          id="fullName"
+                          placeholder="e.g. Ramesh Chandra Verma"
+                          className="h-9 text-xs rounded-xl"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      {/* Age & Gender in 2 Columns */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="age" className="font-semibold">Age (Years)</Label>
+                          <Input
+                            id="age"
+                            type="number"
+                            placeholder="35"
+                            className="h-9 text-xs font-mono rounded-xl"
+                            value={age}
+                            onChange={(e) => setAge(e.target.value ? Number(e.target.value) : '')}
+                            min={1}
+                            max={120}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label htmlFor="gender" className="font-semibold">Gender</Label>
+                          <Select value={gender} onValueChange={setGender}>
+                            <SelectTrigger className="h-9 text-xs rounded-xl">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="male">Male</SelectItem>
+                              <SelectItem value="female">Female</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Blood Group Quick-Pills */}
+                      <div className="space-y-1.5">
+                        <Label className="font-semibold">Blood Group</Label>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map((bg) => (
+                            <button
+                              key={bg}
+                              type="button"
+                              onClick={() => setBloodGroup(bg)}
+                              className={`py-1 text-xs font-mono font-bold rounded-lg border transition-all ${
+                                bloodGroup === bg
+                                  ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                                  : 'bg-muted/40 hover:bg-muted text-foreground border-border/60'
+                              }`}
+                            >
+                              {bg}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Brief Symptoms or Notes */}
+                      <div className="space-y-1.5 pt-1">
+                        <Label htmlFor="notes" className="font-semibold">Chief Complaint / Notes (Optional)</Label>
+                        <Input
+                          id="notes"
+                          placeholder="e.g. Fever for 2 days, back pain"
+                          className="h-9 text-xs rounded-xl"
+                          value={notes}
+                          onChange={(e) => setNotes(e.target.value)}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* RIGHT COLUMN: Doctor Selection & Queue Dispatch (7 cols) */}
+                <div className="lg:col-span-7 space-y-4">
+                  <Card className="border shadow-sm rounded-3xl bg-card/80 backdrop-blur-sm">
+                    <CardHeader className="pb-3 border-b bg-muted/30">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-bold flex items-center gap-2">
+                          <Stethoscope className="w-4 h-4 text-teal-600" />
+                          Step 2: Consulting Doctor & Department
+                        </CardTitle>
+                        <span className="text-[11px] text-muted-foreground font-semibold">
+                          {doctors.length} Doctors Active
+                        </span>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="space-y-4 pt-4">
+                      {loadingDoctors ? (
+                        <div className="p-8 text-center text-xs text-muted-foreground">
+                          Loading active doctor schedules...
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[310px] overflow-y-auto pr-1">
+                          {doctors.map((doc: any) => {
+                            const isSelected = selectedDoctorId === doc.id;
+                            const name = getDoctorDisplayName(doc);
+                            const fee = doc.consultationFee || 500;
+                            const dept = doc.department || 'General OPD';
+
+                            return (
+                              <motion.div
+                                key={doc.id}
+                                whileHover={{ scale: 1.015 }}
+                                whileTap={{ scale: 0.99 }}
+                                onClick={() => setSelectedDoctorId(doc.id)}
+                                className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all duration-200 relative ${
+                                  isSelected
+                                    ? 'border-teal-600 bg-teal-500/10 dark:bg-teal-950/40 shadow-md ring-2 ring-teal-600/20'
+                                    : 'border-border/60 hover:border-border bg-card'
+                                }`}
+                              >
+                                {isSelected && (
+                                  <div className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center">
+                                    <Check className="w-3 h-3" />
+                                  </div>
+                                )}
+
+                                <div className="space-y-1">
+                                  <div className="font-bold text-sm text-foreground pr-6">
+                                    {formatDoctorName(name)}
+                                  </div>
+                                  <div className="text-xs font-semibold text-teal-700 dark:text-teal-400 flex items-center justify-between">
+                                    <span>{dept}</span>
+                                    <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200">
+                                      Series {doc.tokenPrefix || doc.token_prefix || 'A'}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {doc.specialization || 'Consultant Physician'}
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 pt-2 border-t border-border/50 flex items-center justify-between text-[11px]">
+                                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                    ₹{fee}
+                                  </span>
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 text-[10px]">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-ping" />
+                                    Cabin Active
+                                  </span>
+                                </div>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Emergency / Critical Case Selector */}
+                      <div
+                        className={`p-4 rounded-2xl border transition-all ${
+                          isEmergency
+                            ? 'bg-rose-500/15 border-rose-500/50 ring-2 ring-rose-500/30'
+                            : 'bg-muted/20 border-border/60'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <div className="font-bold text-xs flex items-center gap-1.5">
+                              <AlertTriangle className={`w-4 h-4 ${isEmergency ? 'text-rose-600 fill-rose-600' : 'text-amber-500'}`} />
+                              <span className={isEmergency ? 'text-rose-700 dark:text-rose-300 font-black' : 'text-foreground'}>
+                                Emergency Case?
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              Bypasses queue order and places patient as Token #1 with immediate alert.
+                            </div>
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant={isEmergency ? 'destructive' : 'outline'}
+                            size="sm"
+                            onClick={() => setIsEmergency(!isEmergency)}
+                            className={`h-9 px-3.5 text-xs font-bold rounded-xl shrink-0 ${
+                              isEmergency ? 'shadow-lg shadow-rose-500/30 animate-pulse' : ''
+                            }`}
+                          >
+                            {isEmergency ? '🚨 EMERGENCY ACTIVE' : 'Mark as Emergency'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Big Submit Button */}
+                      <div className="pt-2">
+                        <Button
+                          type="submit"
+                          disabled={quickWalkinMutation.isPending || !selectedDoctorId || mobile.length < 10}
+                          className="w-full bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold h-12 text-sm rounded-2xl shadow-lg shadow-teal-600/20 gap-2 transition-all"
+                        >
+                          {quickWalkinMutation.isPending ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              Allocating Live Token...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-4 h-4 text-amber-300" />
+                              Generate Token & Print Slip (Enter)
+                              <ArrowRight className="w-4 h-4 ml-1" />
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </motion.form>
+            )}
+          </AnimatePresence>
         </TabsContent>
 
         {/* ================================================================= */}
-        {/* TAB 2: 📅 ADVANCE SCHEDULED APPOINTMENT (Multi-Step Form) */}
+        {/* TAB 2: 📅 ADVANCE SCHEDULED APPOINTMENT (Multi-Step Wizard) */}
         {/* ================================================================= */}
-        <TabsContent value="advance" className="space-y-6 pt-4">
-          <Card className="max-w-3xl mx-auto border shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base">Advance Date & Slot Booking</CardTitle>
-              <CardDescription className="text-xs">Schedule an appointment for a future date and time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={form.handleSubmit(onAdvanceSubmit)} className="space-y-6">
-                {step === 1 && (
-                  <div className="space-y-4">
-                    <Label>Step 1: Select Patient</Label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search patient by mobile or name..."
-                        className="pl-9 h-9 text-xs"
-                        value={advancePatientSearch}
-                        onChange={(e) => setAdvancePatientSearch(e.target.value)}
-                      />
+        <TabsContent value="advance" className="space-y-6 pt-1 focus-visible:outline-none">
+          <Card className="max-w-3xl mx-auto border shadow-sm rounded-3xl bg-card/90 backdrop-blur-sm overflow-hidden">
+            {/* Step Wizard Indicator Bar */}
+            <div className="border-b bg-muted/40 p-4">
+              <div className="flex items-center justify-between max-w-lg mx-auto relative">
+                {/* Connecting Line */}
+                <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-0.5 bg-border -z-0" />
+                
+                {[
+                  { num: 1, label: 'Patient' },
+                  { num: 2, label: 'Doctor & Date' },
+                  { num: 3, label: 'Slot' },
+                  { num: 4, label: 'Confirm' }
+                ].map((s) => (
+                  <div key={s.num} className="flex flex-col items-center gap-1 relative z-10">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
+                        step === s.num
+                          ? 'bg-teal-600 text-white ring-4 ring-teal-600/20 shadow-md'
+                          : step > s.num
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-muted text-muted-foreground border'
+                      }`}
+                    >
+                      {step > s.num ? <Check className="w-4 h-4" /> : s.num}
                     </div>
-                    <div className="max-h-48 overflow-y-auto border rounded-xl divide-y">
-                      {advancePatients?.map((p: any) => (
-                        <div
-                          key={p.id}
-                          onClick={() => form.setValue('patientId', p.id)}
-                          className={`p-3 cursor-pointer hover:bg-muted/50 text-xs flex justify-between items-center ${
-                            advSelectedPatientId === p.id ? 'bg-teal-50 dark:bg-teal-950 font-bold border-l-4 border-teal-600' : ''
-                          }`}
-                        >
-                          <div>
-                            <div className="font-semibold">{p.fullName || `${p.firstName || ''} ${p.lastName || ''}`}</div>
-                            <div className="text-[11px] text-muted-foreground">{p.patientCode} • {p.mobile}</div>
+                    <span className={`text-[10px] font-semibold ${step >= s.num ? 'text-foreground' : 'text-muted-foreground'}`}>
+                      {s.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <CardContent className="p-6">
+              <form onSubmit={form.handleSubmit(onAdvanceSubmit)}>
+                <AnimatePresence mode="wait">
+                  {/* STEP 1: PATIENT SELECTION */}
+                  {step === 1 && (
+                    <motion.div
+                      key="step1"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-4"
+                    >
+                      <div>
+                        <h3 className="font-bold text-base text-foreground">Step 1: Select or Search Patient</h3>
+                        <p className="text-xs text-muted-foreground">Find existing registered patient records or enter ID</p>
+                      </div>
+
+                      <div className="relative">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search patient by mobile, name, or MRN code..."
+                          className="pl-9 h-10 text-xs rounded-xl"
+                          value={advancePatientSearch}
+                          onChange={(e) => setAdvancePatientSearch(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+
+                      <div className="max-h-56 overflow-y-auto border rounded-2xl divide-y bg-muted/10">
+                        {advancePatients?.map((p: any) => {
+                          const isSel = advSelectedPatientId === p.id;
+                          return (
+                            <div
+                              key={p.id}
+                              onClick={() => form.setValue('patientId', p.id)}
+                              className={`p-3.5 cursor-pointer hover:bg-muted/50 text-xs flex justify-between items-center transition-all ${
+                                isSel ? 'bg-teal-50 dark:bg-teal-950/60 font-bold border-l-4 border-teal-600' : ''
+                              }`}
+                            >
+                              <div className="space-y-0.5">
+                                <div className="font-bold text-foreground text-sm">
+                                  {p.fullName || `${p.firstName || ''} ${p.lastName || ''}`}
+                                </div>
+                                <div className="text-[11px] text-muted-foreground font-mono flex gap-2">
+                                  <span>{p.patientCode}</span>
+                                  <span>•</span>
+                                  <span>{p.mobile}</span>
+                                  {p.gender && (
+                                    <>
+                                      <span>•</span>
+                                      <span>{p.gender}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              {isSel && (
+                                <div className="w-6 h-6 rounded-full bg-teal-600 text-white flex items-center justify-center">
+                                  <Check className="w-3.5 h-3.5" />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {(!advancePatients || advancePatients.length === 0) && (
+                          <div className="p-8 text-center text-xs text-muted-foreground">
+                            {advancePatientSearch ? 'No matching patients found.' : 'Type name or phone above to search patients.'}
                           </div>
-                          {advSelectedPatientId === p.id && <CheckCircle2 className="w-4 h-4 text-teal-600" />}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex justify-end">
-                      <Button type="button" disabled={!advSelectedPatientId} onClick={() => setStep(2)} className="text-xs">
-                        Next: Select Doctor & Date <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {step === 2 && (
-                  <div className="space-y-4 text-xs">
-                    <Label>Step 2: Doctor & Date</Label>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <Label>Doctor</Label>
-                        <Select onValueChange={(val) => form.setValue('doctorId', val)} defaultValue={advSelectedDoctorId}>
-                          <SelectTrigger className="h-9 text-xs">
-                            <SelectValue placeholder="Select Doctor" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {doctors.map((d: any) => (
-                              <SelectItem key={d.id} value={d.id}>
-                                Dr. {getDoctorDisplayName(d)} ({d.department})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        )}
                       </div>
-                      <div className="space-y-1.5">
-                        <Label>Date</Label>
-                        <Input type="date" className="h-9 text-xs" {...form.register('appointmentDate')} />
-                      </div>
-                    </div>
 
-                    <div className="flex justify-between pt-4">
-                      <Button type="button" variant="outline" onClick={() => setStep(1)} className="text-xs">Back</Button>
-                      <Button type="button" disabled={!advSelectedDoctorId} onClick={() => setStep(3)} className="text-xs">
-                        Next: Pick Time Slot <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {step === 3 && (
-                  <div className="space-y-4 text-xs">
-                    <Label>Step 3: Available Time Slots</Label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '16:00', '16:30', '17:00'].map((slot) => (
+                      <div className="flex justify-between items-center pt-4">
                         <Button
-                          key={slot}
                           type="button"
-                          variant={form.watch('appointmentTime') === slot ? "default" : "outline"}
-                          className="h-8 text-xs font-mono"
-                          onClick={() => form.setValue('appointmentTime', slot)}
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate('/reception/patients')}
+                          className="text-xs text-teal-600"
                         >
-                          {slot}
+                          + Register New Patient First
                         </Button>
-                      ))}
-                    </div>
 
-                    <div className="flex justify-between pt-4">
-                      <Button type="button" variant="outline" onClick={() => setStep(2)} className="text-xs">Back</Button>
-                      <Button type="submit" disabled={!form.watch('appointmentTime') || isCreatingAdvance} className="bg-teal-600 text-white text-xs">
-                        {isCreatingAdvance ? 'Scheduling...' : 'Confirm Booking'}
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                        <Button
+                          type="button"
+                          disabled={!advSelectedPatientId}
+                          onClick={() => setStep(2)}
+                          className="bg-teal-600 hover:bg-teal-700 text-white text-xs h-9 px-4 rounded-xl gap-1.5"
+                        >
+                          Next: Doctor & Date <ArrowRight className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
 
-                {step === 4 && (
-                  <div className="p-8 text-center space-y-3">
-                    <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
-                    <div className="text-base font-bold">Appointment Successfully Scheduled!</div>
-                    <Button onClick={() => { setStep(1); form.reset(); }} className="text-xs">Book Another</Button>
-                  </div>
-                )}
+                  {/* STEP 2: DOCTOR & DATE */}
+                  {step === 2 && (
+                    <motion.div
+                      key="step2"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-5 text-xs"
+                    >
+                      <div>
+                        <h3 className="font-bold text-base text-foreground">Step 2: Choose Specialist & Schedule Date</h3>
+                        <p className="text-xs text-muted-foreground">Select consulting doctor, department, and appointment date</p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="font-semibold">Consulting Doctor *</Label>
+                          <Select
+                            onValueChange={(val) => form.setValue('doctorId', val)}
+                            defaultValue={advSelectedDoctorId}
+                          >
+                            <SelectTrigger className="h-10 text-xs rounded-xl font-medium">
+                              <SelectValue placeholder="Choose Doctor" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {doctors.map((d: any) => (
+                                <SelectItem key={d.id} value={d.id}>
+                                  {formatDoctorName(getDoctorDisplayName(d))} ({d.department}) — Series {d.tokenPrefix || d.token_prefix || 'A'}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label className="font-semibold">Appointment Date *</Label>
+                          <Input
+                            type="date"
+                            min={format(new Date(), 'yyyy-MM-dd')}
+                            className="h-10 text-xs rounded-xl font-mono"
+                            {...form.register('appointmentDate')}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Visit Type Radio Group */}
+                      <div className="space-y-2 pt-2">
+                        <Label className="font-semibold">Consultation Nature</Label>
+                        <div className="grid grid-cols-3 gap-3">
+                          {[
+                            { id: 'NEW', label: 'New Visit', desc: 'First time consult' },
+                            { id: 'FOLLOW_UP', label: 'Follow-Up', desc: 'Existing case review' },
+                            { id: 'REPORT_REVIEW', label: 'Lab Review', desc: 'Discuss test findings' }
+                          ].map((v) => (
+                            <div
+                              key={v.id}
+                              onClick={() => form.setValue('visitType', v.id as any)}
+                              className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${
+                                advSelectedVisitType === v.id
+                                  ? 'border-teal-600 bg-teal-500/10 text-teal-800 dark:text-teal-200'
+                                  : 'border-border/60 hover:border-border bg-card'
+                              }`}
+                            >
+                              <div className="font-bold text-xs">{v.label}</div>
+                              <div className="text-[10px] text-muted-foreground">{v.desc}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between pt-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setStep(1)}
+                          className="text-xs h-9 rounded-xl"
+                        >
+                          Back
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={!advSelectedDoctorId || !advSelectedDate}
+                          onClick={() => setStep(3)}
+                          className="bg-teal-600 hover:bg-teal-700 text-white text-xs h-9 px-4 rounded-xl gap-1.5"
+                        >
+                          Next: Select Time Slot <ArrowRight className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* STEP 3: TIME SLOTS */}
+                  {step === 3 && (
+                    <motion.div
+                      key="step3"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-5 text-xs"
+                    >
+                      <div>
+                        <h3 className="font-bold text-base text-foreground">Step 3: Available Time Slots</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Showing slots for {advSelectedDate} with {advSelectedDoctor ? formatDoctorName(getDoctorDisplayName(advSelectedDoctor)) : 'Doctor'}
+                        </p>
+                      </div>
+
+                      {loadingSlots ? (
+                        <div className="p-8 text-center text-xs text-muted-foreground animate-pulse">
+                          Fetching doctor real-time slot calendar...
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-60 overflow-y-auto pr-1">
+                          {availableSlotsList.map((slot) => {
+                            const isSel = advSelectedTime === slot.time;
+                            return (
+                              <button
+                                key={slot.time}
+                                type="button"
+                                disabled={!slot.isAvailable}
+                                onClick={() => form.setValue('appointmentTime', slot.time)}
+                                className={`py-2 px-1 text-xs font-mono font-bold rounded-xl border transition-all ${
+                                  isSel
+                                    ? 'bg-teal-600 text-white border-teal-600 shadow-md ring-2 ring-teal-600/20'
+                                    : slot.isAvailable
+                                    ? 'bg-card hover:bg-teal-50 dark:hover:bg-teal-950/40 text-foreground border-border/80'
+                                    : 'bg-muted/40 text-muted-foreground/50 border-border/40 cursor-not-allowed line-through'
+                                }`}
+                              >
+                                {slot.time}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Booking Summary Box */}
+                      {advSelectedTime && (
+                        <div className="p-3.5 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <div className="font-bold text-teal-800 dark:text-teal-300 text-xs">
+                              Selected Slot: {advSelectedDate} at {advSelectedTime}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              Fee: ₹{advSelectedDoctor?.consultationFee || 500}
+                            </div>
+                          </div>
+                          <CheckCircle2 className="w-5 h-5 text-teal-600" />
+                        </div>
+                      )}
+
+                      <div className="flex justify-between pt-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setStep(2)}
+                          className="text-xs h-9 rounded-xl"
+                        >
+                          Back
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={!advSelectedTime || isCreatingAdvance}
+                          className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white text-xs h-10 px-5 rounded-xl font-bold shadow-md"
+                        >
+                          {isCreatingAdvance ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                              Scheduling...
+                            </>
+                          ) : (
+                            'Confirm & Lock Appointment'
+                          )}
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* STEP 4: CELEBRATION / SUCCESS */}
+                  {step === 4 && (
+                    <motion.div
+                      key="step4"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="p-6 text-center space-y-4"
+                    >
+                      <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
+                        <CheckCheck className="w-8 h-8" />
+                      </div>
+
+                      <div className="space-y-1">
+                        <h3 className="text-xl font-black text-foreground">
+                          Appointment Successfully Booked!
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          The patient schedule has been reserved and synchronized across hospital displays.
+                        </p>
+                      </div>
+
+                      {bookingResult && (
+                        <div className="max-w-sm mx-auto p-4 rounded-2xl bg-muted/30 border border-border/80 text-left text-xs space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Token Code:</span>
+                            <span className="font-mono font-bold text-teal-600 text-sm">
+                              {bookingResult.tokenNumber}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Date & Slot:</span>
+                            <span className="font-semibold">{bookingResult.appointmentDate} at {bookingResult.appointmentTime}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-center gap-3 pt-3">
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            setStep(1);
+                            form.reset();
+                          }}
+                          className="bg-teal-600 hover:bg-teal-700 text-white text-xs h-9 px-4 rounded-xl"
+                        >
+                          Book Another Appointment
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => navigate('/reception/queue')}
+                          className="text-xs h-9 rounded-xl"
+                        >
+                          Go to Live Queue
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </form>
             </CardContent>
           </Card>

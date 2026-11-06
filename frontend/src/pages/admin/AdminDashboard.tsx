@@ -31,7 +31,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatDoctorName } from '@/lib/utils';
 
 const COLORS = ['#0d9488', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#14b8a6'];
 
@@ -74,7 +74,7 @@ const AdminDashboardContent = () => {
   const revenueSeries: { date: string; revenue: number }[] = Array.isArray(revenue) ? revenue : [];
   const doctorSeries = (doctors ?? [])
     .map((doctor: any) => ({
-      name: doctor.doctorName,
+      name: formatDoctorName(doctor.doctorName),
       count: doctor.completedAppointments ?? 0,
     }))
     .sort((a: any, b: any) => b.count - a.count)

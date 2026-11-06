@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.cache import cached
+from app.core.utils import split_doctor_name, format_doctor_name
 from app.models.appointment import Appointment
 from app.models.billing import Bill
 from app.models.doctor import Doctor
@@ -115,12 +116,26 @@ class DashboardService:
                             "lastName": "",
                         },
                         "doctor": {
-                            "firstName": (
+                            "firstName": split_doctor_name(
                                 appointment.doctor.user.full_name
                                 if appointment.doctor and appointment.doctor.user
-                                else "Unknown"
+                                else ""
+                            )[0],
+                            "lastName": split_doctor_name(
+                                appointment.doctor.user.full_name
+                                if appointment.doctor and appointment.doctor.user
+                                else ""
+                            )[1],
+                            "fullName": format_doctor_name(
+                                appointment.doctor.user.full_name
+                                if appointment.doctor and appointment.doctor.user
+                                else ""
                             ),
-                            "lastName": "",
+                            "name": format_doctor_name(
+                                appointment.doctor.user.full_name
+                                if appointment.doctor and appointment.doctor.user
+                                else ""
+                            ),
                         },
                         "appointmentTime": appointment.appointment_time.strftime("%H:%M"),
                         "tokenNumber": appointment.token_number,

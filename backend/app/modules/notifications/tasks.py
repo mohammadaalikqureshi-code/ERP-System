@@ -3,8 +3,11 @@ from app.core.database import AsyncSessionLocal
 from app.models.notification import Notification, NotificationTemplate
 from app.models.patient import Patient
 from app.models.appointment import Appointment
+from app.models.doctor import Doctor
 from app.modules.notifications.providers import MockWhatsAppProvider, MockSMSProvider
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from app.core.utils import format_doctor_name
 from datetime import datetime, timezone, timedelta
 import asyncio
 
@@ -50,7 +53,9 @@ async def _scan_reminders_async(window_hours: int, flag_field: str):
         now = datetime.now(timezone.utc)
         target = now + timedelta(hours=window_hours)
         
-        stmt = select(Appointment).where(
+        stmt = select(Appointment).options(
+            selectinload(Appointment.doctor).selectinload(Doctor.user)
+        ).where(
             getattr(Appointment, flag_field) == False,
             Appointment.status == "booked"
         )
@@ -59,10 +64,11 @@ async def _scan_reminders_async(window_hours: int, flag_field: str):
             app_dt = datetime.combine(app.appointment_date, app.appointment_time).replace(tzinfo=timezone.utc)
             if now <= app_dt <= target:
                 setattr(app, flag_field, True)
+                doc_raw = app.doctor.user.full_name if (app.doctor and app.doctor.user) else "Doctor"
                 await _send_notification_async(
                     str(app.patient_id),
                     "reminder_24h" if window_hours == 24 else "reminder_2h",
-                    {"date": str(app.appointment_date), "time": str(app.appointment_time), "doctor": "Dr."},
+                    {"date": str(app.appointment_date), "time": str(app.appointment_time), "doctor": format_doctor_name(doc_raw)},
                     "whatsapp"
                 )
         await db.commit()

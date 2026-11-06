@@ -7,6 +7,7 @@ import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Users, CreditCard, Calendar as CalendarIcon, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { formatDoctorName } from '@/lib/utils';
 
 const ReceptionDashboardContent = () => {
   const { data: dashboardData, isLoading, error } = useReceptionDashboard();
@@ -99,7 +100,7 @@ const ReceptionDashboardContent = () => {
                   <div key={appointment.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
                     <div>
                       <p className="text-sm font-medium leading-none">{appointment.patient?.firstName} {appointment.patient?.lastName}</p>
-                      <p className="text-sm text-muted-foreground">{appointment.appointmentTime} - {appointment.doctor?.firstName} {appointment.doctor?.lastName}</p>
+                      <p className="text-sm text-muted-foreground">{appointment.appointmentTime} - {formatDoctorName(appointment.doctor?.fullName || `${appointment.doctor?.firstName || ''} ${appointment.doctor?.lastName || ''}`)}</p>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-sm font-bold bg-muted px-2 py-1 rounded">{appointment.tokenNumber}</div>

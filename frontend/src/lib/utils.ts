@@ -80,3 +80,57 @@ export function getInitials(name: string | null | undefined): string {
     .map((part) => part.charAt(0).toUpperCase())
     .join('');
 }
+
+/**
+ * Strips any leading "Dr.", "Dr", "Doctor", "dr.", case-insensitively,
+ * including duplicated "Dr. Dr." prefixes.
+ */
+export function cleanDoctorName(name?: string | null): string {
+  if (!name || !name.trim()) return '';
+  let clean = name.trim();
+  while (/^(dr\.?|doctor)\s+/i.test(clean) || /^(dr\.?|doctor)$/i.test(clean)) {
+    clean = clean.replace(/^(dr\.?|doctor)\s*/i, '').trim();
+  }
+  return clean;
+}
+
+/**
+ * Ensures a doctor's name is prefixed with EXACTLY ONE "Dr." title.
+ * Strips any existing "Dr." / "Dr" / "Doctor" before prepending "Dr. ".
+ * Never produces "Dr. Dr. Name".
+ *
+ * Examples:
+ *   formatDoctorName("Meera Raghavan") -> "Dr. Meera Raghavan"
+ *   formatDoctorName("Dr. Meera Raghavan") -> "Dr. Meera Raghavan"
+ *   formatDoctorName("Dr. Dr. Meera Raghavan") -> "Dr. Meera Raghavan"
+ *   formatDoctorName(undefined) -> "Doctor"
+ */
+export function formatDoctorName(name?: string | null): string {
+  const clean = cleanDoctorName(name);
+  return clean ? `Dr. ${clean}` : 'Doctor';
+}
+
+/**
+ * Formats a doctor object or string safely ensuring exactly one "Dr." prefix.
+ */
+export function getDoctorDisplayName(doc: any): string {
+  if (!doc) return 'Doctor';
+  if (typeof doc === 'string') return formatDoctorName(doc);
+  const raw =
+    doc.user?.fullName ||
+    doc.user?.full_name ||
+    doc.fullName ||
+    doc.full_name ||
+    doc.doctorName ||
+    doc.doctor_name ||
+    doc.name ||
+    (doc.firstName && doc.firstName !== 'Doctor'
+      ? `${doc.firstName} ${doc.lastName || ''}`.trim()
+      : '') ||
+    (doc.user
+      ? `${doc.user.firstName || doc.user.first_name || ''} ${doc.user.lastName || doc.user.last_name || ''}`.trim()
+      : '') ||
+    (doc.department ? `${doc.department} Specialist` : 'Doctor');
+  return formatDoctorName(raw);
+}
+

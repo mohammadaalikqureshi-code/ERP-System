@@ -24,10 +24,13 @@ from app.models.audit import AuditLog
 
 router = APIRouter(prefix="/admin/backup", tags=["System Backup & Disaster Recovery"])
 
-BACKUP_DIR = os.environ.get("BACKUP_DIR", "/app/backups")
+BACKUP_DIR = os.environ.get("BACKUP_DIR")
+if not BACKUP_DIR:
+    BACKUP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../backups"))
+
 try:
     os.makedirs(BACKUP_DIR, exist_ok=True)
-except PermissionError:
+except (PermissionError, OSError):
     BACKUP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backups")
     os.makedirs(BACKUP_DIR, exist_ok=True)
 

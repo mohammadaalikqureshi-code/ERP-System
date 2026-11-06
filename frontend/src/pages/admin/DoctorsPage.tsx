@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Plus, Edit2, Calendar, Sparkles, Wand2, Copy, Check, Stethoscope, Lock, Crown, AlertCircle } from 'lucide-react';
 import { Doctor } from '@/types';
 import { useAuthStore } from '@/stores/authStore';
+import { formatDoctorName } from '@/lib/utils';
 
 const DoctorsPageContent = () => {
   const currentUser = useAuthStore((state) => state.user);
@@ -131,7 +132,7 @@ const DoctorsPageContent = () => {
           Dr
         </div>
         <div>
-          <div className="font-semibold text-foreground">Dr. {row.firstName} {row.lastName}</div>
+          <div className="font-semibold text-foreground">{formatDoctorName(`${row.firstName} ${row.lastName || ''}`)}</div>
           <div className="text-[11px] text-muted-foreground">{(row as any).email || `${row.firstName?.toLowerCase()}@hospital.in`}</div>
         </div>
       </div>

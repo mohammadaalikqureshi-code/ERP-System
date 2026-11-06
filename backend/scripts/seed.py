@@ -369,6 +369,7 @@ async def seed_users(db, clinic, role_map) -> dict:
         ).scalar_one_or_none()
 
         if not doctor:
+            from app.core.utils import index_to_token_prefix
             doctor = Doctor(
                 user_id=user.id,
                 clinic_id=clinic.id,
@@ -377,6 +378,7 @@ async def seed_users(db, clinic, role_map) -> dict:
                 qualification=definition["qualification"],
                 consultation_fee=Decimal(str(definition["fee"])),
                 avg_consultation_minutes=definition["minutes"],
+                token_prefix=index_to_token_prefix(index),
                 is_available=True,
             )
             db.add(doctor)
@@ -577,6 +579,7 @@ async def seed_appointments(db, clinic, people, patients, tests) -> None:
 
         tokens_today[doctor.id] = tokens_today.get(doctor.id, 0) + 1
         queue_number = tokens_today[doctor.id]
+        doc_prefix = doctor.token_prefix or "A"
 
         appointment = Appointment(
             clinic_id=clinic.id,
@@ -586,7 +589,7 @@ async def seed_appointments(db, clinic, people, patients, tests) -> None:
             visit_type="follow_up" if index % 3 == 0 else "new",
             appointment_date=today,
             appointment_time=slot,
-            token_number=f"A-{queue_number:03d}",
+            token_number=f"{doc_prefix}-{queue_number:03d}",
             queue_number=queue_number,
             status=status,
             notes=random.choice(
@@ -725,6 +728,7 @@ async def seed_appointments(db, clinic, people, patients, tests) -> None:
 
             tokens_issued[doctor.id] = tokens_issued.get(doctor.id, 0) + 1
             queue_number = tokens_issued[doctor.id]
+            doc_prefix = doctor.token_prefix or "A"
 
             appointment = Appointment(
                 clinic_id=clinic.id,
@@ -734,7 +738,7 @@ async def seed_appointments(db, clinic, people, patients, tests) -> None:
                 visit_type=random.choice(["new", "follow_up"]),
                 appointment_date=day,
                 appointment_time=time(9 + slot_index % 8, (slot_index % 3) * 20),
-                token_number=f"A-{queue_number:03d}",
+                token_number=f"{doc_prefix}-{queue_number:03d}",
                 queue_number=queue_number,
                 status=status,
                 booked_by=booked_by,

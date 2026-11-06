@@ -12,6 +12,7 @@ class DoctorBase(BaseModel):
     avg_consultation_minutes: int = 15
     signature_url: Optional[str] = None
     is_available: bool = True
+    token_prefix: Optional[str] = None
 
 class DoctorCreate(DoctorBase):
     user_id: uuid.UUID
@@ -38,6 +39,8 @@ class DoctorResponse(DoctorBase):
     fullName: Optional[str] = ""
     full_name: Optional[str] = ""
     name: Optional[str] = ""
+    token_prefix: Optional[str] = None
+    tokenPrefix: Optional[str] = None
     user: Optional[DoctorUserResponse] = None
     isActive: Optional[bool] = True
     model_config = {"from_attributes": True}

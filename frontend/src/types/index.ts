@@ -79,6 +79,8 @@ export interface Doctor {
   department: string;
   consultationFee: number;
   isActive: boolean;
+  tokenPrefix?: string;
+  token_prefix?: string;
 }
 
 export interface DoctorSchedule {

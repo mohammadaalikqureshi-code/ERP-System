@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
+from app.core.utils import format_doctor_name
 from app.documents.pdf import render_pdf
 from app.documents.templates import prescription_html
 from app.models.clinic import Clinic
@@ -59,7 +60,7 @@ class PrescriptionPDFGenerator:
                 "mobile": patient.mobile,
             },
             doctor={
-                "name": doctor.user.full_name if doctor and doctor.user else "—",
+                "name": format_doctor_name(doctor.user.full_name) if doctor and doctor.user else "—",
                 "department": doctor.department if doctor else "",
                 "qualification": doctor.qualification if doctor else "",
             },

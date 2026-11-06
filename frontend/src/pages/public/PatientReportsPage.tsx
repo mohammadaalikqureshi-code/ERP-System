@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/components/ui/use-toast';
 import { downloadFile } from '@/lib/download';
+import { formatDoctorName } from '@/lib/utils';
 import api from '@/api/client';
 import { 
   Search, FileText, FlaskConical, Pill, Receipt, Calendar, 
@@ -251,7 +252,7 @@ export default function PatientReportsPage() {
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Date: {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : '—'} • Referred by: Dr. {order.doctorName}
+                            Date: {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : '—'} • Referred by: {formatDoctorName(order.doctorName)}
                           </p>
                         </div>
                         <Button 
@@ -312,7 +313,7 @@ export default function PatientReportsPage() {
                             <span className="text-xs text-muted-foreground">• {rx.department}</span>
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Issued by: <strong className="text-foreground">{rx.doctorName}</strong> on {rx.date ? new Date(rx.date).toLocaleDateString() : '—'}
+                            Issued by: <strong className="text-foreground">{formatDoctorName(rx.doctorName)}</strong> on {rx.date ? new Date(rx.date).toLocaleDateString() : '—'}
                           </p>
                         </div>
                         <Button 
@@ -465,7 +466,7 @@ export default function PatientReportsPage() {
                               <TableCell className="font-mono font-bold">{apt.tokenNumber || `Token #${apt.queueNumber}`}</TableCell>
                               <TableCell className="text-xs">{apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString() : '—'}</TableCell>
                               <TableCell className="text-xs font-medium">{apt.department}</TableCell>
-                              <TableCell className="text-xs">Dr. {apt.doctorName}</TableCell>
+                              <TableCell className="text-xs">{formatDoctorName(apt.doctorName)}</TableCell>
                               <TableCell className="text-right">
                                 <span className="text-xs px-2 py-0.5 rounded-full font-semibold uppercase bg-secondary text-secondary-foreground">
                                   {apt.status}

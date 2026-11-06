@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { useToast } from '@/components/ui/use-toast';
 import { Clock, UserCircle, Play, CheckCircle, SkipForward } from 'lucide-react';
 import { Appointment, Doctor } from '@/types';
+import { formatDoctorName } from '@/lib/utils';
 
 const QueueManagementContent = () => {
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>('all');
@@ -53,7 +54,7 @@ const QueueManagementContent = () => {
         <div className="text-xs text-muted-foreground flex items-center gap-1 mb-4">
           <Clock className="h-3 w-3" /> Scheduled: {appointment.appointmentTime}
           {selectedDoctorId === 'all' && (
-            <span className="ml-2 block mt-1 truncate">Dr. {appointment.doctor?.lastName}</span>
+            <span className="ml-2 block mt-1 truncate">{formatDoctorName(appointment.doctor?.fullName || appointment.doctor?.name || `${appointment.doctor?.firstName || ''} ${appointment.doctor?.lastName || ''}`)}</span>
           )}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -87,7 +88,9 @@ const QueueManagementContent = () => {
             <SelectContent>
               <SelectItem value="all">All Doctors</SelectItem>
               {doctors?.map((doc: Doctor) => (
-                <SelectItem key={doc.id} value={doc.id}>Dr. {doc.firstName} {doc.lastName}</SelectItem>
+                <SelectItem key={doc.id} value={doc.id}>
+                  {formatDoctorName(doc.fullName || `${doc.firstName} ${doc.lastName || ''}`)} (Series {doc.tokenPrefix || doc.token_prefix || 'A'})
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>

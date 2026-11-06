@@ -13,6 +13,7 @@ from app.modules.reports.schemas import (
     InventoryConsumptionResponse
 )
 from datetime import date, datetime
+from app.core.utils import format_doctor_name
 import uuid
 from typing import List
 
@@ -88,7 +89,7 @@ class ReportsService:
         return [
             DoctorPerformanceResponse(
                 doctor_id=row.id,
-                doctor_name=row.full_name,
+                doctor_name=format_doctor_name(row.full_name),
                 total_patients=row.total_appointments or 0,
                 completed_appointments=row.completed or 0,
                 revenue_generated=revenue_by_doctor.get(row.id, 0.0),
