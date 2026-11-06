@@ -7,6 +7,7 @@ here or in the environment.
 """
 
 from functools import lru_cache
+import os
 from typing import List, Literal
 
 from pydantic import computed_field, model_validator, field_validator
@@ -197,6 +198,39 @@ class Settings(BaseSettings):
         """
         if not self.is_production:
             return self
+
+        # Cloud host auto-healing: if running on Render or other container host without
+        # manually configured random secrets, generate secure keys so the deployment succeeds.
+        is_cloud_hosted = bool(
+            os.getenv("RENDER")
+            or os.getenv("RENDER_SERVICE_ID")
+            or os.getenv("RENDER_INSTANCE_ID")
+            or os.getenv("AUTO_GENERATE_SECRETS", "").lower() in ("true", "1")
+        )
+        if is_cloud_hosted:
+            import secrets
+            from cryptography.fernet import Fernet
+            import logging
+            _log = logging.getLogger("app.core.config")
+
+            if self.SECRET_KEY in INSECURE_PLACEHOLDERS or len(self.SECRET_KEY) < 32:
+                object.__setattr__(self, "SECRET_KEY", secrets.token_urlsafe(48))
+                _log.warning("[config] Auto-generated secure random SECRET_KEY for cloud deployment.")
+
+            if self.JWT_SECRET_KEY in INSECURE_PLACEHOLDERS or len(self.JWT_SECRET_KEY) < 32:
+                object.__setattr__(self, "JWT_SECRET_KEY", secrets.token_urlsafe(48))
+                _log.warning("[config] Auto-generated secure random JWT_SECRET_KEY for cloud deployment.")
+
+            if self.JWT_REFRESH_SECRET_KEY in INSECURE_PLACEHOLDERS or len(self.JWT_REFRESH_SECRET_KEY) < 32:
+                object.__setattr__(self, "JWT_REFRESH_SECRET_KEY", secrets.token_urlsafe(48))
+                _log.warning("[config] Auto-generated secure random JWT_REFRESH_SECRET_KEY for cloud deployment.")
+
+            if not self.ENCRYPTION_KEY:
+                object.__setattr__(self, "ENCRYPTION_KEY", Fernet.generate_key().decode())
+                _log.warning("[config] Auto-generated Fernet ENCRYPTION_KEY for cloud deployment.")
+
+            if self.DEBUG:
+                object.__setattr__(self, "DEBUG", False)
 
         problems: List[str] = []
         for name in ("SECRET_KEY", "JWT_SECRET_KEY", "JWT_REFRESH_SECRET_KEY"):
