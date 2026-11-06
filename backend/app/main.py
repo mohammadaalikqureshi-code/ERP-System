@@ -176,8 +176,12 @@ async def root():
         async with AsyncSessionLocal() as session:
             existing_user = await session.scalar(select(User).limit(1))
             if not existing_user:
-                from scripts.seed import main as run_seed
-                await run_seed()
+                try:
+                    from scripts.restore_demo_data import restore_data
+                    await restore_data(force=False)
+                except Exception:
+                    from scripts.seed import main as run_seed
+                    await run_seed()
                 seeded_now = True
     except Exception as exc:
         logger.warning("Auto-seed on root visit notice: %s", exc)
@@ -196,16 +200,24 @@ async def root():
 
 @app.get("/seed", tags=["Root"])
 async def root_seed():
-    """Direct root trigger to seed demo hospital, doctors, and staff."""
-    from scripts.seed import main as run_seed
+    """Direct root trigger to restore all hospital data, doctors, and staff."""
     try:
-        await run_seed()
+        from scripts.restore_demo_data import restore_data
+        await restore_data(force=True)
         return {
             "status": "ok",
-            "message": "Demo data seeded! All demo accounts active with password Medicare@2026.",
+            "message": "Full database restored successfully! All previous appointments, doctors, and demo accounts are active (Password: Medicare@2026).",
         }
     except Exception as exc:
-        return {"status": "error", "message": str(exc)}
+        from scripts.seed import main as run_seed
+        try:
+            await run_seed()
+            return {
+                "status": "ok",
+                "message": "Demo data seeded! All demo accounts active with password Medicare@2026.",
+            }
+        except Exception as seed_exc:
+            return {"status": "error", "message": f"{exc} | {seed_exc}"}
 
 
 @app.get(f"{settings.API_V1_STR}/health", tags=["Health"])

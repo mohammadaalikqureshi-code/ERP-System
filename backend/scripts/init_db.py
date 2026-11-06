@@ -48,6 +48,13 @@ async def main() -> None:
     except Exception as exc:  # noqa: BLE001
         print(f"[init_db] Market-ready DDL skipped ({exc!s}).")
 
+    # Populate initial data from scripts/demo_data.json if database is empty
+    try:
+        from scripts.restore_demo_data import restore_data
+        await restore_data(force=False)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[init_db] Initial data load notice: {exc!s}")
+
     await engine.dispose()
 
 

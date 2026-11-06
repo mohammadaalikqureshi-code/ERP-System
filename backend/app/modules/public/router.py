@@ -511,14 +511,19 @@ async def download_public_bill_receipt(bill_id: uuid.UUID, db: AsyncSession = De
 @router.post("/seed")
 @router.get("/seed")
 async def public_seed_demo():
-    """Idempotently ensure initial roles, clinics, and demo accounts exist."""
-    from scripts.seed import main as run_seed
+    """Idempotently restore all demo hospital data, doctors, and staff from previous database."""
     try:
+        from scripts.restore_demo_data import restore_data
+        await restore_data(force=True)
+        return {
+            "status": "ok",
+            "message": "All data from previous database restored successfully! All demo accounts active with password Medicare@2026.",
+        }
+    except Exception as exc:
+        from scripts.seed import main as run_seed
         await run_seed()
         return {
             "status": "ok",
             "message": "Demo data ensured. All demo accounts are active with password Medicare@2026.",
         }
-    except Exception as exc:
-        return {"status": "error", "message": f"Seeding failed: {exc!s}"}
 
