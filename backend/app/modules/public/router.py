@@ -502,3 +502,23 @@ async def download_public_bill_receipt(bill_id: uuid.UUID, db: AsyncSession = De
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="tax-invoice-{str(bill_id)[:8]}.pdf"'},
     )
+
+
+# =====================================================================
+# 4. Public Demo Seed Trigger (Safe & Idempotent)
+# =====================================================================
+
+@router.post("/seed")
+@router.get("/seed")
+async def public_seed_demo():
+    """Idempotently ensure initial roles, clinics, and demo accounts exist."""
+    from scripts.seed import main as run_seed
+    try:
+        await run_seed()
+        return {
+            "status": "ok",
+            "message": "Demo data ensured. All demo accounts are active with password Medicare@2026.",
+        }
+    except Exception as exc:
+        return {"status": "error", "message": f"Seeding failed: {exc!s}"}
+

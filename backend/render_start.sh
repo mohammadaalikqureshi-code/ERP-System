@@ -66,8 +66,8 @@ fi
 echo "[render_start] Ensuring database schema (idempotent, safe on existing DBs)..."
 python -m scripts.init_db || echo "[render_start] Warning: schema init encountered an issue; proceeding to start API server..."
 
-if [ "${SEED_ON_STARTUP}" = "true" ]; then
-  echo "[render_start] SEED_ON_STARTUP=true — seeding demo data (idempotent)..."
+if [ "${SEED_ON_STARTUP}" != "false" ]; then
+  echo "[render_start] Seeding demo hospital, staff, and doctors (idempotent)..."
   python -m scripts.seed || echo "[render_start] Seed skipped/failed; continuing to start the server."
 fi
 

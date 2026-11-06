@@ -63,6 +63,26 @@ export const LoginPage: React.FC = () => {
   });
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'cold_start' | 'offline'>('checking');
   const [isTestingServer, setIsTestingServer] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
+
+  const handleSeedData = async () => {
+    setIsSeeding(true);
+    try {
+      const res = await apiClient.post('/public/seed', {});
+      toast({
+        title: 'Demo Accounts Seeded! 🎉',
+        description: 'All roles, staff, and doctors created. Password: Medicare@2026',
+      });
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Seeding Notice',
+        description: err?.message || 'Seeding failed. Verify your Render backend is running.',
+      });
+    } finally {
+      setIsSeeding(false);
+    }
+  };
 
   const checkServerStatus = async (targetUrl?: string) => {
     const raw = (targetUrl || serverUrlInput || API_BASE_URL).trim().replace(/\/+$/, '');
@@ -341,41 +361,6 @@ export const LoginPage: React.FC = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md z-10">
         <div className="bg-white dark:bg-stone-950 py-8 px-4 shadow-xl shadow-stone-200/50 dark:shadow-none sm:rounded-2xl sm:px-10 border border-stone-100 dark:border-stone-800">
-          
-          {/* Prominent Server Connection Banner right at the top */}
-          <div className="mb-5 p-2.5 rounded-xl border border-stone-200 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-900/60 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 truncate">
-              <span
-                className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                  serverStatus === 'online'
-                    ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50 animate-pulse'
-                    : serverStatus === 'cold_start'
-                    ? 'bg-amber-500 animate-ping'
-                    : serverStatus === 'checking'
-                    ? 'bg-sky-400'
-                    : 'bg-rose-500'
-                }`}
-              />
-              <span className="font-medium text-stone-700 dark:text-stone-300 truncate">
-                {serverStatus === 'online'
-                  ? 'API: Connected (Online)'
-                  : serverStatus === 'cold_start'
-                  ? 'Waking up on Render (wait 20s)...'
-                  : serverStatus === 'checking'
-                  ? 'Connecting to Server...'
-                  : 'Backend Disconnected'}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsServerModalOpen(true)}
-              className="text-teal-600 hover:text-teal-700 dark:text-teal-400 font-semibold hover:underline flex items-center gap-1 shrink-0 ml-2"
-            >
-              <Server className="w-3.5 h-3.5" />
-              Configure API
-            </button>
-          </div>
-
           <Tabs defaultValue="password" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6 bg-stone-100 dark:bg-stone-900">
               <TabsTrigger value="password">Password Login</TabsTrigger>
@@ -566,6 +551,21 @@ export const LoginPage: React.FC = () => {
                   <span className="text-[10px] text-stone-400 truncate w-full">{acc.role}</span>
                 </button>
               ))}
+            </div>
+
+            {/* Initialize Seed Data Button if Database is Fresh */}
+            <div className="mt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleSeedData}
+                disabled={isSeeding}
+                className="w-full text-xs gap-1.5 border-teal-200 dark:border-teal-900 bg-teal-50/50 dark:bg-teal-950/20 text-teal-700 dark:text-teal-300 hover:bg-teal-100/50"
+              >
+                {isSeeding ? <LoadingSpinner size="sm" className="mr-1 text-teal-600" /> : <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />}
+                {isSeeding ? 'Creating Demo Accounts on Server...' : 'Database Fresh? Click to Initialize Demo Accounts'}
+              </Button>
             </div>
           </div>
 
