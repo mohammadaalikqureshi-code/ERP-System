@@ -94,8 +94,8 @@ app = FastAPI(
     description="Hospital and multi-specialty clinic ERP.",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url=None if settings.is_production else "/docs",
-    redoc_url=None if settings.is_production else "/redoc",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
 # --- middleware (outermost first) -------------------------------------------
@@ -164,7 +164,20 @@ for router in (
     app.include_router(router, prefix=settings.API_V1_STR)
 
 
-# --- health probes ----------------------------------------------------------
+# --- root & health probes ---------------------------------------------------
+@app.get("/", tags=["Root"])
+async def root():
+    """Welcome endpoint: verifies that the FastAPI backend is running."""
+    return {
+        "status": "online",
+        "service": settings.APP_NAME,
+        "version": app.version,
+        "environment": settings.ENVIRONMENT,
+        "docs": "/docs",
+        "health": f"{settings.API_V1_STR}/health",
+    }
+
+
 @app.get(f"{settings.API_V1_STR}/health", tags=["Health"])
 async def health_check():
     """Liveness: is the process up? Deliberately does no I/O."""
