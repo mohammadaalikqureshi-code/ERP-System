@@ -341,6 +341,41 @@ export const LoginPage: React.FC = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md z-10">
         <div className="bg-white dark:bg-stone-950 py-8 px-4 shadow-xl shadow-stone-200/50 dark:shadow-none sm:rounded-2xl sm:px-10 border border-stone-100 dark:border-stone-800">
+          
+          {/* Prominent Server Connection Banner right at the top */}
+          <div className="mb-5 p-2.5 rounded-xl border border-stone-200 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-900/60 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 truncate">
+              <span
+                className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                  serverStatus === 'online'
+                    ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50 animate-pulse'
+                    : serverStatus === 'cold_start'
+                    ? 'bg-amber-500 animate-ping'
+                    : serverStatus === 'checking'
+                    ? 'bg-sky-400'
+                    : 'bg-rose-500'
+                }`}
+              />
+              <span className="font-medium text-stone-700 dark:text-stone-300 truncate">
+                {serverStatus === 'online'
+                  ? 'API: Connected (Online)'
+                  : serverStatus === 'cold_start'
+                  ? 'Waking up on Render (wait 20s)...'
+                  : serverStatus === 'checking'
+                  ? 'Connecting to Server...'
+                  : 'Backend Disconnected'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsServerModalOpen(true)}
+              className="text-teal-600 hover:text-teal-700 dark:text-teal-400 font-semibold hover:underline flex items-center gap-1 shrink-0 ml-2"
+            >
+              <Server className="w-3.5 h-3.5" />
+              Configure API
+            </button>
+          </div>
+
           <Tabs defaultValue="password" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6 bg-stone-100 dark:bg-stone-900">
               <TabsTrigger value="password">Password Login</TabsTrigger>
