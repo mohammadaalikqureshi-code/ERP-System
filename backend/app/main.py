@@ -167,15 +167,45 @@ for router in (
 # --- root & health probes ---------------------------------------------------
 @app.get("/", tags=["Root"])
 async def root():
-    """Welcome endpoint: verifies that the FastAPI backend is running."""
+    """Welcome endpoint: verifies that the FastAPI backend is running and auto-seeds if empty."""
+    seeded_now = False
+    try:
+        from app.models.user import User
+        from sqlalchemy import select
+        from app.core.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as session:
+            existing_user = await session.scalar(select(User).limit(1))
+            if not existing_user:
+                from scripts.seed import main as run_seed
+                await run_seed()
+                seeded_now = True
+    except Exception as exc:
+        logger.warning("Auto-seed on root visit notice: %s", exc)
+
     return {
         "status": "online",
         "service": settings.APP_NAME,
         "version": app.version,
         "environment": settings.ENVIRONMENT,
+        "demo_seeded": True if seeded_now else "already_present",
+        "message": "Demo accounts ready! Sign in with password: Medicare@2026",
         "docs": "/docs",
         "health": f"{settings.API_V1_STR}/health",
     }
+
+
+@app.get("/seed", tags=["Root"])
+async def root_seed():
+    """Direct root trigger to seed demo hospital, doctors, and staff."""
+    from scripts.seed import main as run_seed
+    try:
+        await run_seed()
+        return {
+            "status": "ok",
+            "message": "Demo data seeded! All demo accounts active with password Medicare@2026.",
+        }
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
 
 
 @app.get(f"{settings.API_V1_STR}/health", tags=["Health"])
