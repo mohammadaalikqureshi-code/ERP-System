@@ -4,9 +4,9 @@ import { useForm as useHookForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import apiClient from '@/api/client';
-import { ROLE_ROUTES } from '@/lib/constants';
+import { ROLE_ROUTES, API_BASE_URL } from '@/lib/constants';
 import { useToast } from '@/components/ui/use-toast';
-import { Activity, KeyRound, Lock, Mail, ArrowLeft, CheckCircle2, ShieldCheck, FileText, HeartPulse } from 'lucide-react';
+import { Activity, KeyRound, Lock, Mail, ArrowLeft, CheckCircle2, ShieldCheck, FileText, HeartPulse, Server, RefreshCw, Globe } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,44 @@ export const LoginPage: React.FC = () => {
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
   const [forgotDebugCode, setForgotDebugCode] = useState<string | null>(null);
   const [isForgotLoading, setIsForgotLoading] = useState(false);
+
+  // Backend Connection Diagnostic State
+  const [isServerModalOpen, setIsServerModalOpen] = useState(false);
+  const [serverUrlInput, setServerUrlInput] = useState(() => {
+    return localStorage.getItem('medicare_custom_api_url') || API_BASE_URL;
+  });
+  const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'cold_start' | 'offline'>('checking');
+  const [isTestingServer, setIsTestingServer] = useState(false);
+
+  const checkServerStatus = async (targetUrl?: string) => {
+    const raw = (targetUrl || serverUrlInput || API_BASE_URL).trim().replace(/\/+$/, '');
+    const cleanUrl = raw.includes('/api/v1') ? raw : `${raw}/api/v1`;
+    setIsTestingServer(true);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(`${cleanUrl}/health`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        setServerStatus('online');
+      } else {
+        setServerStatus('offline');
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        // Cold start in progress
+        setServerStatus('cold_start');
+      } else {
+        setServerStatus('offline');
+      }
+    } finally {
+      setIsTestingServer(false);
+    }
+  };
+
+  useEffect(() => {
+    checkServerStatus();
+  }, []);
 
   const {
     register,
@@ -517,6 +555,40 @@ export const LoginPage: React.FC = () => {
               </Link>
             </div>
           </div>
+
+          {/* Backend Connection Status Bar */}
+          <div className="mt-4 pt-3 border-t border-stone-200 dark:border-stone-800 flex items-center justify-between text-[11px] text-stone-500">
+            <div className="flex items-center gap-1.5 truncate max-w-[240px]">
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  serverStatus === 'online'
+                    ? 'bg-emerald-500 animate-pulse'
+                    : serverStatus === 'cold_start'
+                    ? 'bg-amber-500 animate-ping'
+                    : serverStatus === 'checking'
+                    ? 'bg-sky-400'
+                    : 'bg-rose-500'
+                }`}
+              />
+              <span className="truncate">
+                {serverStatus === 'online'
+                  ? 'Server Online'
+                  : serverStatus === 'cold_start'
+                  ? 'Waking up on Render...'
+                  : serverStatus === 'checking'
+                  ? 'Checking Server...'
+                  : 'Backend Disconnected'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsServerModalOpen(true)}
+              className="text-teal-600 hover:text-teal-700 dark:text-teal-400 font-semibold hover:underline flex items-center gap-1 shrink-0"
+            >
+              <Server className="w-3 h-3" />
+              Configure API
+            </button>
+          </div>
         </div>
       </div>
 
@@ -653,6 +725,108 @@ export const LoginPage: React.FC = () => {
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Backend Server Configuration Dialog */}
+      <Dialog open={isServerModalOpen} onOpenChange={setIsServerModalOpen}>
+        <DialogContent className="sm:max-w-md bg-white dark:bg-stone-950 border-stone-200 dark:border-stone-800">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-stone-900 dark:text-white">
+              <Server className="w-5 h-5 text-teal-600" />
+              Backend Connection Setup
+            </DialogTitle>
+            <DialogDescription className="text-stone-500 text-xs">
+              Configure or test the API server URL that this frontend communicates with.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="backend-url" className="text-xs font-semibold">Backend API URL</Label>
+              <div className="mt-1.5 flex gap-2">
+                <Input
+                  id="backend-url"
+                  type="text"
+                  value={serverUrlInput}
+                  onChange={(e) => setServerUrlInput(e.target.value)}
+                  placeholder="https://medicare-erp-api.onrender.com"
+                  className="text-xs"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => checkServerStatus(serverUrlInput)}
+                  disabled={isTestingServer}
+                  className="shrink-0 gap-1 text-xs"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isTestingServer ? 'animate-spin' : ''}`} />
+                  Test
+                </Button>
+              </div>
+              <p className="text-[11px] text-stone-400 mt-1">
+                Enter your Render Web Service URL (e.g. <code className="text-teal-600 font-mono">https://medicare-erp-api.onrender.com</code>).
+              </p>
+            </div>
+
+            <div className="p-3 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/50 flex items-center justify-between text-xs">
+              <span className="text-stone-600 dark:text-stone-400 font-medium">Status:</span>
+              <span className={`font-semibold flex items-center gap-1.5 ${
+                serverStatus === 'online' ? 'text-emerald-600' : serverStatus === 'cold_start' ? 'text-amber-600' : 'text-rose-600'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${
+                  serverStatus === 'online' ? 'bg-emerald-500' : serverStatus === 'cold_start' ? 'bg-amber-500 animate-ping' : 'bg-rose-500'
+                }`} />
+                {serverStatus === 'online' ? 'Connected & Healthy (200 OK)' : serverStatus === 'cold_start' ? 'Waking up on Render (wait 20s)...' : 'Cannot reach server'}
+              </span>
+            </div>
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row justify-between gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                localStorage.removeItem('medicare_custom_api_url');
+                setServerUrlInput(API_BASE_URL);
+                checkServerStatus(API_BASE_URL);
+                toast({ title: 'Reset to Default', description: 'Restored standard Render API URL.' });
+              }}
+              className="text-xs text-stone-500 self-start sm:self-auto"
+            >
+              Reset to Default
+            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsServerModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  let cleaned = serverUrlInput.trim().replace(/\/+$/, '');
+                  if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+                    cleaned = `https://${cleaned}`;
+                  }
+                  if (!cleaned.includes('/api/v1')) {
+                    cleaned = `${cleaned}/api/v1`;
+                  }
+                  localStorage.setItem('medicare_custom_api_url', cleaned);
+                  setIsServerModalOpen(false);
+                  checkServerStatus(cleaned);
+                  toast({
+                    title: 'API URL Saved',
+                    description: `Frontend is now communicating with ${cleaned}`,
+                  });
+                }}
+                className="bg-teal-600 hover:bg-teal-700 text-white text-xs"
+              >
+                Save & Use
+              </Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
