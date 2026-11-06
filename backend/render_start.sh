@@ -11,7 +11,7 @@
 set -e
 
 echo "[render_start] Ensuring database schema (idempotent, safe on existing DBs)..."
-python -m scripts.init_db
+python -m scripts.init_db || echo "[render_start] Warning: schema init encountered an issue; proceeding to start API server..."
 
 if [ "${SEED_ON_STARTUP}" = "true" ]; then
   echo "[render_start] SEED_ON_STARTUP=true — seeding demo data (idempotent)..."

@@ -24,9 +24,19 @@ from app.models import Base
 
 
 async def main() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("[init_db] Base schema ensured (missing tables created).")
+    max_retries = 5
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            print("[init_db] Base schema ensured (missing tables created).")
+            break
+        except Exception as exc:
+            if attempt == max_retries:
+                print(f"[init_db] Database connection error after {max_retries} attempts: {exc!s}")
+                raise
+            print(f"[init_db] Waiting for database connection (attempt {attempt}/{max_retries})...")
+            await asyncio.sleep(2)
 
     # Extra columns/tables added via raw IF-NOT-EXISTS DDL. Postgres-specific;
     # harmless to skip on databases (e.g. SQLite) that do not support it.
