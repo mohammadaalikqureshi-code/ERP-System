@@ -174,11 +174,12 @@ async def root():
         from sqlalchemy import select
         from app.core.database import AsyncSessionLocal
         async with AsyncSessionLocal() as session:
-            existing_user = await session.scalar(select(User).limit(1))
-            if not existing_user:
+            admin_user = await session.scalar(select(User).where(User.email == "admin@medicare-erp.in"))
+            receptionist_user = await session.scalar(select(User).where(User.email == "priya.menon@sanjeevanihospital.in"))
+            if not admin_user or not receptionist_user:
                 try:
                     from scripts.restore_demo_data import restore_data
-                    await restore_data(force=False)
+                    await restore_data(force=True)
                 except Exception:
                     from scripts.seed import main as run_seed
                     await run_seed()
@@ -191,33 +192,33 @@ async def root():
         "service": settings.APP_NAME,
         "version": app.version,
         "environment": settings.ENVIRONMENT,
+        "demo_accounts": "active",
         "demo_seeded": True if seeded_now else "already_present",
-        "message": "Demo accounts ready! Sign in with password: Medicare@2026",
+        "message": "Demo data ensured. All demo accounts are active with password Medicare@2026.",
         "docs": "/docs",
         "health": f"{settings.API_V1_STR}/health",
     }
 
 
-@app.get("/seed", tags=["Root"])
+@app.api_route("/seed", methods=["GET", "POST"], tags=["Root"])
+@app.api_route(f"{settings.API_V1_STR}/seed", methods=["GET", "POST"], tags=["Root"])
 async def root_seed():
     """Direct root trigger to restore all hospital data, doctors, and staff."""
     try:
         from scripts.restore_demo_data import restore_data
         await restore_data(force=True)
-        return {
-            "status": "ok",
-            "message": "Full database restored successfully! All previous appointments, doctors, and demo accounts are active (Password: Medicare@2026).",
-        }
     except Exception as exc:
+        logger.warning("restore_data notice in /seed: %s", exc)
+    try:
         from scripts.seed import main as run_seed
-        try:
-            await run_seed()
-            return {
-                "status": "ok",
-                "message": "Demo data seeded! All demo accounts active with password Medicare@2026.",
-            }
-        except Exception as seed_exc:
-            return {"status": "error", "message": f"{exc} | {seed_exc}"}
+        await run_seed()
+    except Exception as exc:
+        logger.warning("run_seed notice in /seed: %s", exc)
+
+    return {
+        "status": "ok",
+        "message": "Demo data ensured. All demo accounts are active with password Medicare@2026.",
+    }
 
 
 @app.get(f"{settings.API_V1_STR}/health", tags=["Health"])

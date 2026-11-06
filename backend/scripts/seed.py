@@ -344,6 +344,14 @@ async def seed_users(db, clinic, role_map) -> dict:
             )
             db.add(user)
             await db.flush()
+        else:
+            user.password_hash = password_hash
+            user.is_active = True
+            user.is_deleted = False
+            if clinic_id and not user.clinic_id:
+                user.clinic_id = clinic_id
+            if role_name in role_map:
+                user.role_id = role_map[role_name].id
         return user
 
     people["super_admin"] = await upsert_user(
@@ -870,6 +878,8 @@ async def main() -> None:
         print("\n[OK] Seeding complete.")
         print_credentials()
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"\n[WARNING] Database seeding deferred: {e}")
         print("💡 TIP: Verify that your Render DATABASE_URL is the full connection URL: postgresql://user:password@host/dbname")
 

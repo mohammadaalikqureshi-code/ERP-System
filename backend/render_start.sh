@@ -64,10 +64,13 @@ if [ -f ".env.production.local" ]; then
 fi
 
 echo "[render_start] Ensuring database schema (idempotent, safe on existing DBs)..."
-python -m scripts.init_db || echo "[render_start] Warning: schema init encountered an issue; proceeding to start API server..."
+python -m scripts.init_db || echo "[render_start] Warning: schema init encountered an issue; continuing..."
+
+echo "[render_start] Restoring full database snapshot from demo_data.json..."
+python -m scripts.restore_demo_data --force || echo "[render_start] Snapshot restore notice; continuing to seed verification..."
 
 if [ "${SEED_ON_STARTUP}" != "false" ]; then
-  echo "[render_start] Seeding demo hospital, staff, and doctors (idempotent)..."
+  echo "[render_start] Seeding and verifying demo accounts and doctors..."
   python -m scripts.seed || echo "[render_start] Seed skipped/failed; continuing to start the server."
 fi
 
