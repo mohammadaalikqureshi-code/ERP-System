@@ -63,16 +63,11 @@ if [ -f ".env.production.local" ]; then
     set +a
 fi
 
-echo "[render_start] Ensuring database schema (idempotent, safe on existing DBs)..."
-python -m scripts.init_db || echo "[render_start] Warning: schema init encountered an issue; continuing..."
+echo "[render_start] Ensuring database schema..."
+python -m scripts.init_db || true
 
-echo "[render_start] Restoring full database snapshot from demo_data.json..."
-python -m scripts.restore_demo_data --force || echo "[render_start] Snapshot restore notice; continuing to seed verification..."
-
-if [ "${SEED_ON_STARTUP}" != "false" ]; then
-  echo "[render_start] Seeding and verifying demo accounts and doctors..."
-  python -m scripts.seed || echo "[render_start] Seed skipped/failed; continuing to start the server."
-fi
+echo "[render_start] Verifying demo database accounts..."
+python -m scripts.restore_demo_data || true
 
 echo "[render_start] Starting API on 0.0.0.0:${PORT:-8000}..."
 exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
