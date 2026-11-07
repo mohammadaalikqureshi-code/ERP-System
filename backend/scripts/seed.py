@@ -228,7 +228,7 @@ async def seed_roles(db) -> dict:
     print("[*] Roles and permissions...")
     role_map = {}
     for name, definition in ROLES.items():
-        role = (await db.execute(select(Role).where(Role.name == name))).scalar_one_or_none()
+        role = (await db.execute(select(Role).where(Role.name == name))).scalars().first()
         if role:
             role.permissions = definition["permissions"]
             role.description = definition["description"]
@@ -252,7 +252,7 @@ async def seed_clinics(db) -> list:
     for definition in CLINICS:
         clinic = (
             await db.execute(select(Clinic).where(Clinic.name == definition["name"]))
-        ).scalar_one_or_none()
+        ).scalars().first()
 
         if not clinic:
             clinic = Clinic(
@@ -319,7 +319,7 @@ async def seed_panels(db, clinic) -> None:
                     ClinicModule.clinic_id == clinic.id, ClinicModule.module_key == module_key
                 )
             )
-        ).scalar_one_or_none()
+        ).scalars().first()
         if not exists:
             db.add(ClinicModule(clinic_id=clinic.id, module_key=module_key, is_enabled=enabled, config={}))
     await db.commit()
@@ -331,7 +331,7 @@ async def seed_users(db, clinic, role_map) -> dict:
     people = {}
 
     async def upsert_user(full_name, email, phone, role_name, clinic_id):
-        user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+        user = (await db.execute(select(User).where(User.email == email))).scalars().first()
         if not user:
             user = User(
                 clinic_id=clinic_id,
@@ -367,14 +367,14 @@ async def seed_users(db, clinic, role_map) -> dict:
         )
 
     people["doctors"] = []
-    for definition in DOCTORS:
+    for index, definition in enumerate(DOCTORS):
         user = await upsert_user(
             definition["name"], definition["email"], definition["phone"], "doctor", clinic.id
         )
 
         doctor = (
             await db.execute(select(Doctor).where(Doctor.user_id == user.id))
-        ).scalar_one_or_none()
+        ).scalars().first()
 
         if not doctor:
             from app.core.utils import index_to_token_prefix
@@ -424,7 +424,7 @@ async def seed_catalogues(db, clinic) -> list:
                     LabTestCatalog.test_name == definition["name"],
                 )
             )
-        ).scalar_one_or_none()
+        ).scalars().first()
 
         if not test:
             reference = definition["range"]
@@ -449,7 +449,7 @@ async def seed_catalogues(db, clinic) -> list:
                     InventoryItem.clinic_id == clinic.id, InventoryItem.name == definition["name"]
                 )
             )
-        ).scalar_one_or_none()
+        ).scalars().first()
 
         if not item:
             # A couple of items start below their reorder level so the low-stock
@@ -483,7 +483,7 @@ async def seed_catalogues(db, clinic) -> list:
             await db.execute(
                 select(NotificationTemplate).where(NotificationTemplate.code == template["code"])
             )
-        ).scalar_one_or_none()
+        ).scalars().first()
         if not exists:
             db.add(
                 NotificationTemplate(
@@ -507,7 +507,7 @@ async def seed_patients(db, clinic) -> list:
             await db.execute(
                 select(Patient).where(Patient.clinic_id == clinic.id, Patient.mobile == mobile)
             )
-        ).scalar_one_or_none()
+        ).scalars().first()
 
         if not patient:
             patient = Patient(

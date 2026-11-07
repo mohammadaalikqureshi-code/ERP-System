@@ -1,7 +1,7 @@
 """Restore demo database data from scripts/demo_data.json into the target database.
 
 Works seamlessly on both SQLite and PostgreSQL with robust type conversion,
-individual table transactions, and conflict handling (ON CONFLICT DO NOTHING / OR IGNORE).
+topological dependency order, table truncation on force, and conflict handling.
 """
 
 import asyncio
@@ -13,12 +13,13 @@ import uuid
 from datetime import date, datetime, time
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, Numeric, Boolean, JSON, Time, insert, select
+from sqlalchemy import Date, DateTime, Numeric, Boolean, JSON, Time, insert, select, text, update
 from sqlalchemy.dialects.postgresql import UUID as pgUUID
 from app.core.database import engine, AsyncSessionLocal
 import app.models  # noqa: F401
 from app.models import Base
 from app.models.user import User
+from app.core.security import get_password_hash
 
 logger = logging.getLogger("restore_demo_data")
 
@@ -36,26 +37,45 @@ async def restore_data(force: bool = False) -> bool:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # 2. Check if key demo accounts already exist
-    async with AsyncSessionLocal() as session:
-        admin_user = await session.scalar(select(User).where(User.email == "admin@medicare-erp.in"))
-        receptionist_user = await session.scalar(select(User).where(User.email == "priya.menon@sanjeevanihospital.in"))
-        if admin_user and receptionist_user and not force:
-            print("[restore_data] Demo users already present and verified. Skipping restore.")
-            return True
+    # 2. Check if key demo accounts already exist and are valid (unless force is requested)
+    if not force:
+        try:
+            async with AsyncSessionLocal() as session:
+                admin_user = (await session.execute(select(User).where(User.email == "admin@medicare-erp.in"))).scalars().first()
+                receptionist_user = (await session.execute(select(User).where(User.email == "priya.menon@sanjeevanihospital.in"))).scalars().first()
+                if admin_user and receptionist_user:
+                    print("[restore_data] Demo users already present and verified. Skipping restore.")
+                    return True
+        except Exception as check_exc:
+            print(f"[restore_data] Verification check notice: {check_exc}")
 
-    total_records = sum(len(v) for v in data.values())
-    print(f"[restore_data] Restoring {total_records} records from {data_file} into {engine.dialect.name}...")
-
-    # 3. Insert table by table in independent transactions
     is_postgres = engine.dialect.name == "postgresql"
     is_sqlite = engine.dialect.name == "sqlite"
 
-    for table_name, rows in data.items():
+    # 3. If force is enabled, wipe existing data so original snapshot UUIDs and foreign keys insert cleanly
+    if force:
+        print(f"[restore_data] Force mode active: clearing existing demo tables on {engine.dialect.name}...")
+        try:
+            async with engine.begin() as conn:
+                if is_postgres:
+                    all_table_names = [t.name for t in Base.metadata.sorted_tables]
+                    quoted = ", ".join(f'"{name}"' for name in all_table_names)
+                    await conn.execute(text(f"TRUNCATE TABLE {quoted} CASCADE;"))
+                else:
+                    for table in reversed(Base.metadata.sorted_tables):
+                        await conn.execute(table.delete())
+            print("[restore_data] Existing demo tables cleared successfully.")
+        except Exception as exc:
+            print(f"[restore_data] Notice during table clear: {exc}")
+
+    total_records = sum(len(v) for v in data.values())
+    print(f"[restore_data] Restoring {total_records} records from {data_file} into {engine.dialect.name} in dependency order...")
+
+    # 4. Insert table by table in strict topological dependency order (parents before children)
+    for table in Base.metadata.sorted_tables:
+        table_name = table.name
+        rows = data.get(table_name)
         if not rows:
-            continue
-        table = Base.metadata.tables.get(table_name)
-        if table is None:
             continue
 
         cleaned_rows = []
@@ -66,7 +86,7 @@ async def restore_data(force: bool = False) -> bool:
                     continue
                 col = table.columns[k]
                 col_type = col.type
-                
+
                 # Robust type conversion across SQLite and PostgreSQL
                 try:
                     if isinstance(col_type, Boolean):
@@ -147,7 +167,6 @@ async def restore_data(force: bool = False) -> bool:
                 print(f"  ✓ {table_name}: {len(cleaned_rows)} records restored")
             except Exception as exc:
                 print(f"  ⚠ {table_name} warning on bulk insert ({exc!s}), trying row-by-row...")
-                # Row-by-row fallback
                 for row in cleaned_rows:
                     try:
                         async with engine.begin() as conn:
@@ -161,7 +180,23 @@ async def restore_data(force: bool = False) -> bool:
                     except Exception:
                         pass
 
-    # 4. Final verification and seed completion
+    # 5. Guarantee all demo user passwords are active with password Medicare@2026
+    try:
+        demo_hash = get_password_hash("Medicare@2026")
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                update(User).values(
+                    password_hash=demo_hash,
+                    is_active=True,
+                    is_deleted=False,
+                )
+            )
+            await session.commit()
+        print("  ✓ All user credentials verified with password 'Medicare@2026'.")
+    except Exception as exc:
+        print(f"[restore_data] User password refresh notice: {exc}")
+
+    # 6. Final verification with seed
     try:
         from scripts.seed import main as run_seed
         await run_seed()

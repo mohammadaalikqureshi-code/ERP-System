@@ -174,8 +174,8 @@ async def root():
         from sqlalchemy import select
         from app.core.database import AsyncSessionLocal
         async with AsyncSessionLocal() as session:
-            admin_user = await session.scalar(select(User).where(User.email == "admin@medicare-erp.in"))
-            receptionist_user = await session.scalar(select(User).where(User.email == "priya.menon@sanjeevanihospital.in"))
+            admin_user = (await session.execute(select(User).where(User.email == "admin@medicare-erp.in"))).scalars().first()
+            receptionist_user = (await session.execute(select(User).where(User.email == "priya.menon@sanjeevanihospital.in"))).scalars().first()
             if not admin_user or not receptionist_user:
                 try:
                     from scripts.restore_demo_data import restore_data

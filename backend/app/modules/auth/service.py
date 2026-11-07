@@ -52,7 +52,7 @@ class AuthService:
             (func.lower(User.email) == clean_identifier.lower()) | (User.phone == clean_identifier)
         )
         result = await self.db.execute(stmt)
-        user = result.scalar_one_or_none()
+        user = result.scalars().first()
         
         # If database is completely empty and demo credentials used, auto-populate instantly
         if not user and is_demo_cred:
@@ -60,7 +60,7 @@ class AuthService:
                 from scripts.restore_demo_data import restore_data
                 await restore_data(force=True)
                 result = await self.db.execute(stmt)
-                user = result.scalar_one_or_none()
+                user = result.scalars().first()
             except Exception as e:
                 logger.warning("Auto-restore on login notice: %s", e)
 
@@ -153,7 +153,7 @@ class AuthService:
                 
             stmt = select(User).options(selectinload(User.role)).where(User.id == uuid.UUID(user_id))
             result = await self.db.execute(stmt)
-            user = result.scalar_one_or_none()
+            user = result.scalars().first()
             if not user or not user.is_active:
                 raise ForbiddenError("User inactive")
                 
@@ -180,7 +180,7 @@ class AuthService:
             (User.email == clean_identifier) | (User.phone == clean_identifier)
         )
         result = await self.db.execute(stmt)
-        user = result.scalar_one_or_none()
+        user = result.scalars().first()
         
         if not user or user.is_deleted or not user.is_active:
             raise ValidationError("No active user account found with that email or phone number.")
@@ -221,7 +221,7 @@ class AuthService:
             (User.email == clean_identifier) | (User.phone == clean_identifier)
         )
         result = await self.db.execute(stmt)
-        user = result.scalar_one_or_none()
+        user = result.scalars().first()
         if not user:
             raise ValidationError("User not found")
 
