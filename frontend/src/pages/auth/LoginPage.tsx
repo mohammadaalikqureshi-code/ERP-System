@@ -191,14 +191,28 @@ export const LoginPage: React.FC = () => {
       navigate(target, { replace: true });
     } catch (error: any) {
       const is401 = error?.response?.status === 401 || error?.status === 401;
-      const errorMsg = is401
-        ? 'Invalid email/phone or password. Please verify credentials (Demo: Medicare@2026).'
-        : (error.message || 'Unable to connect to authentication service. Please try again.');
-      toast({
-        title: 'Sign In Failed',
-        description: errorMsg,
-        variant: 'destructive',
-      });
+      const isNetwork = !error?.response || error?.code === 'ECONNABORTED' || error?.message?.includes('timeout') || error?.message === 'Network Error';
+
+      if (isNetwork) {
+        setIsServerModalOpen(true);
+        toast({
+          title: 'Cannot Reach Backend Server',
+          description: 'The frontend could not connect to your API. Please paste your Render Backend URL below and click Save.',
+          variant: 'destructive',
+        });
+      } else if (is401) {
+        toast({
+          title: 'Sign In Failed',
+          description: 'Invalid email/phone or password. Please verify credentials (Demo: Medicare@2026).',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Sign In Failed',
+          description: error.message || 'Unable to connect to authentication service. Please try again.',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsLoading(false);
     }
