@@ -29,7 +29,14 @@ let refreshRequest: Promise<string> | null = null;
 apiClient.interceptors.request.use((config) => {
   const customUrl = localStorage.getItem('medicare_custom_api_url')?.trim();
   if (customUrl) {
-    config.baseURL = customUrl.replace(/\/+$/, '');
+    if (customUrl.includes('medicare-erp-api') || !customUrl.startsWith('http')) {
+      localStorage.removeItem('medicare_custom_api_url');
+      config.baseURL = API_BASE_URL;
+    } else {
+      config.baseURL = customUrl.replace(/\/+$/, '');
+    }
+  } else {
+    config.baseURL = API_BASE_URL;
   }
 
   const { accessToken, clinicId } = useAuthStore.getState();

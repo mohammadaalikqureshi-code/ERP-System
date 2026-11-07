@@ -1,34 +1,32 @@
 /**
  * Application-wide constants.
  *
- * Anything environment-specific comes from Vite env vars (see `.env.example`)
- * so the same build can be pointed at any backend without code changes.
+ * The official production backend is permanently set to https://medicare-era.onrender.com/api/v1
+ * so that any user on any device (phone, desktop, tablet, other network) connects immediately.
  */
 
+export const CANONICAL_BACKEND_URL = 'https://medicare-era.onrender.com/api/v1';
+
 function resolveApiBaseUrl(): string {
-  // Check user override first
+  // Check user override first, purging any legacy broken URLs (e.g. medicare-erp-api)
   if (typeof window !== 'undefined' && window.localStorage) {
     const customUrl = localStorage.getItem('medicare_custom_api_url')?.trim();
     if (customUrl) {
-      let formatted = customUrl.replace(/\/+$/, '');
-      if (!formatted.startsWith('http://') && !formatted.startsWith('https://') && !formatted.startsWith('/')) {
-        formatted = `https://${formatted}`;
+      if (customUrl.includes('medicare-erp-api') || !customUrl.startsWith('http')) {
+        localStorage.removeItem('medicare_custom_api_url');
+      } else {
+        let formatted = customUrl.replace(/\/+$/, '');
+        if (!formatted.includes('/api/v1')) {
+          formatted = `${formatted}/api/v1`;
+        }
+        return formatted;
       }
-      if (!formatted.includes('/api/v1')) {
-        formatted = `${formatted}/api/v1`;
-      }
-      return formatted;
     }
   }
 
+  // Vite environment variable override (if configured at build time)
   let envUrl = import.meta.env.VITE_API_BASE_URL?.trim();
-  if (envUrl) {
-    // If Render Blueprint passed internal private hostname like "medicare-erp-api:10000" or "medicare-erp-api"
-    if (envUrl.includes(':10000') || (!envUrl.includes('.') && !envUrl.startsWith('/'))) {
-      const cleanHost = envUrl.split(':')[0].replace(/^https?:\/\//, '');
-      envUrl = `https://${cleanHost}.onrender.com`;
-    }
-
+  if (envUrl && !envUrl.includes('medicare-erp-api')) {
     let formatted = envUrl.replace(/\/+$/, '');
     if (!formatted.startsWith('http://') && !formatted.startsWith('https://') && !formatted.startsWith('/')) {
       formatted = `https://${formatted}`;
@@ -39,34 +37,16 @@ function resolveApiBaseUrl(): string {
     return formatted;
   }
 
-  // Automatic Cloud Domain resolution for Render & hosted environments
+  // Local development only
   if (typeof window !== 'undefined' && window.location) {
     const hostname = window.location.hostname;
-    
-    // If running locally in development or docker
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return '/api/v1';
     }
-
-    // If hosted on Render (e.g. medicare-erp-web.onrender.com, erp-web.onrender.com, etc.)
-    if (hostname.includes('.onrender.com')) {
-      if (hostname.includes('-web.')) {
-        const apiHost = hostname.replace('-web.', '-api.');
-        return `https://${apiHost}/api/v1`;
-      }
-      if (hostname.includes('-frontend.')) {
-        const apiHost = hostname.replace('-frontend.', '-backend.');
-        return `https://${apiHost}/api/v1`;
-      }
-      if (hostname.includes('-api.')) {
-        return `https://${hostname}/api/v1`;
-      }
-      // Standard Render production API endpoint fallback
-      return 'https://medicare-erp-api.onrender.com/api/v1';
-    }
   }
 
-  return '/api/v1';
+  // Permanent official production API endpoint for ALL devices & domains
+  return CANONICAL_BACKEND_URL;
 }
 
 export const API_BASE_URL: string = resolveApiBaseUrl();
@@ -147,3 +127,72 @@ export const INVENTORY_CATEGORIES = [
 
 /** Default page size for paginated tables. */
 export const DEFAULT_PAGE_SIZE = 10;
+
+/** Default currency symbol throughout the application. */
+export const CURRENCY_SYMBOL: string = '₹';
+
+/** Default tax rate for invoices and billing. */
+export const DEFAULT_GST_RATE: number = 18.0;
+
+/** Status colors for appointments, consultations, bills, etc. */
+export const STATUS_COLORS: Record<string, string> = {
+  // Appointment / OPD statuses
+  scheduled: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  confirmed: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+  waiting: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  in_consultation: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+  completed: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300',
+  cancelled: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
+  no_show: 'bg-stone-100 text-stone-800 dark:bg-stone-800 dark:text-stone-300',
+
+  // Billing statuses
+  paid: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+  partially_paid: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  pending: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+  refunded: 'bg-stone-100 text-stone-800 dark:bg-stone-800 dark:text-stone-300',
+
+  // Lab order statuses
+  collected: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300',
+  processing: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
+  verified: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300',
+};
+
+/**
+ * Standard appointment slot duration in minutes.
+ * Can be overridden per clinic / doctor.
+ */
+export const DEFAULT_SLOT_MINUTES: number = 15;
+
+/**
+ * Maximum patient age that requires a guardian / emergency contact.
+ */
+export const MINOR_AGE_THRESHOLD: number = 18;
+
+/**
+ * Pagination defaults.
+ */
+export const PAGINATION = {
+  DEFAULT_PAGE_SIZE: 15,
+  MAX_PAGE_SIZE: 100,
+  PAGE_SIZE_OPTIONS: [10, 15, 25, 50, 100],
+} as const;
+
+/**
+ * Allowed image upload types.
+ */
+export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
+/**
+ * Allowed document upload types for EMR records.
+ */
+export const ALLOWED_DOC_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+] as const;
+
+/**
+ * Maximum file upload size in bytes (10 MB).
+ */
+export const MAX_UPLOAD_BYTES: number = 10 * 1024 * 1024;

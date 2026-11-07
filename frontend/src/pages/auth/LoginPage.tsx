@@ -59,7 +59,12 @@ export const LoginPage: React.FC = () => {
   // Backend Connection Diagnostic State
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [serverUrlInput, setServerUrlInput] = useState(() => {
-    return localStorage.getItem('medicare_custom_api_url') || API_BASE_URL;
+    const saved = localStorage.getItem('medicare_custom_api_url');
+    if (saved && (saved.includes('medicare-erp-api') || !saved.startsWith('http'))) {
+      localStorage.removeItem('medicare_custom_api_url');
+      return API_BASE_URL;
+    }
+    return saved || API_BASE_URL;
   });
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'cold_start' | 'offline'>('checking');
   const [isTestingServer, setIsTestingServer] = useState(false);
@@ -799,7 +804,7 @@ export const LoginPage: React.FC = () => {
                   type="text"
                   value={serverUrlInput}
                   onChange={(e) => setServerUrlInput(e.target.value)}
-                  placeholder="https://medicare-erp-api.onrender.com"
+                  placeholder="https://medicare-era.onrender.com"
                   className="text-xs"
                 />
                 <Button
@@ -815,7 +820,7 @@ export const LoginPage: React.FC = () => {
                 </Button>
               </div>
               <p className="text-[11px] text-stone-400 mt-1">
-                Enter your Render Web Service URL (e.g. <code className="text-teal-600 font-mono">https://medicare-erp-api.onrender.com</code>).
+                Official Production Backend: <code className="text-teal-600 font-mono">https://medicare-era.onrender.com</code>
               </p>
             </div>
 
@@ -841,7 +846,7 @@ export const LoginPage: React.FC = () => {
                 localStorage.removeItem('medicare_custom_api_url');
                 setServerUrlInput(API_BASE_URL);
                 checkServerStatus(API_BASE_URL);
-                toast({ title: 'Reset to Default', description: 'Restored standard Render API URL.' });
+                toast({ title: 'Reset to Official Backend', description: 'Restored permanent backend URL (https://medicare-era.onrender.com).' });
               }}
               className="text-xs text-stone-500 self-start sm:self-auto"
             >
