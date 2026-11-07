@@ -940,19 +940,39 @@ class AppointmentService:
         status: str = None,
         visit_type: str = None,
         target_date: str = None,
-        search: str = None
+        search: str = None,
+        period: str = "daily"
     ):
-        """Super Admin / Clinic Admin Live Token & Queue Command Center with live analytics."""
+        """Super Admin / Clinic Admin Live Token & Queue Command Center with live daily, monthly, and yearly analytics."""
         from datetime import date as d_cls
-        from sqlalchemy import or_
-        t_date = d_cls.fromisoformat(target_date) if target_date else datetime.now(timezone.utc).date()
+        import calendar
+        from collections import defaultdict
+        from sqlalchemy import or_, and_
+
+        today = datetime.now(timezone.utc).date()
+        t_date = d_cls.fromisoformat(target_date) if target_date else today
+
+        # Date range according to period
+        if period == "monthly":
+            m_start = d_cls(t_date.year, t_date.month, 1)
+            _, last_day = calendar.monthrange(t_date.year, t_date.month)
+            m_end = d_cls(t_date.year, t_date.month, last_day)
+            date_filter = and_(Appointment.appointment_date >= m_start, Appointment.appointment_date <= m_end)
+        elif period == "yearly":
+            y_start = d_cls(t_date.year, 1, 1)
+            y_end = d_cls(t_date.year, 12, 31)
+            date_filter = and_(Appointment.appointment_date >= y_start, Appointment.appointment_date <= y_end)
+        elif period == "all":
+            date_filter = True
+        else:  # "daily"
+            date_filter = (Appointment.appointment_date == t_date)
 
         stmt = select(Appointment).options(
             selectinload(Appointment.patient),
             selectinload(Appointment.doctor).selectinload(Doctor.user)
         ).where(
             Appointment.clinic_id == clinic_id,
-            Appointment.appointment_date == t_date
+            date_filter
         )
 
         if doctor_id:
@@ -1000,7 +1020,86 @@ class AppointmentService:
             )
         )
 
-        # Calculate live analytics summary
+        # -------------------------------------------------------------
+        # Comprehensive Daily, Monthly, and Yearly Analytics
+        # -------------------------------------------------------------
+        cur_m_start = d_cls(today.year, today.month, 1)
+        _, cur_last_day = calendar.monthrange(today.year, today.month)
+        cur_m_end = d_cls(today.year, today.month, cur_last_day)
+        cur_y_start = d_cls(today.year, 1, 1)
+        cur_y_end = d_cls(today.year, 12, 31)
+
+        year_stmt = select(
+            Appointment.appointment_date,
+            Appointment.status,
+            Appointment.department,
+            Appointment.visit_type,
+            Appointment.token_number
+        ).where(
+            Appointment.clinic_id == clinic_id,
+            Appointment.appointment_date >= cur_y_start,
+            Appointment.appointment_date <= cur_y_end
+        )
+        year_rows = (await self.db.execute(year_stmt)).all()
+
+        month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        monthly_trend_map = {m: {"month": m, "total": 0, "completed": 0, "emergency": 0} for m in month_names}
+        dept_map = defaultdict(lambda: {"department": "", "total": 0, "completed": 0, "emergency": 0})
+
+        daily_tokens = 0
+        monthly_tokens = 0
+        yearly_tokens = len(year_rows)
+        daily_completed = 0
+        monthly_completed = 0
+        yearly_completed = 0
+        daily_emergency = 0
+        monthly_emergency = 0
+        yearly_emergency = 0
+
+        for r in year_rows:
+            is_emg = r.visit_type == "emergency" or (r.token_number and r.token_number.startswith("EMG"))
+            is_done = r.status in ["completed", "COMPLETED"]
+
+            # Monthly trend
+            m_idx = r.appointment_date.month - 1
+            m_name = month_names[m_idx]
+            monthly_trend_map[m_name]["total"] += 1
+            if is_emg:
+                monthly_trend_map[m_name]["emergency"] += 1
+            if is_done:
+                monthly_trend_map[m_name]["completed"] += 1
+
+            # Dept map
+            dept = r.department or "General OPD"
+            dept_map[dept]["department"] = dept
+            dept_map[dept]["total"] += 1
+            if is_emg:
+                dept_map[dept]["emergency"] += 1
+            if is_done:
+                dept_map[dept]["completed"] += 1
+
+            # Yearly
+            if is_done:
+                yearly_completed += 1
+            if is_emg:
+                yearly_emergency += 1
+
+            # Monthly
+            if cur_m_start <= r.appointment_date <= cur_m_end:
+                monthly_tokens += 1
+                if is_done:
+                    monthly_completed += 1
+                if is_emg:
+                    monthly_emergency += 1
+
+            # Daily
+            if r.appointment_date == today:
+                daily_tokens += 1
+                if is_done:
+                    daily_completed += 1
+                if is_emg:
+                    daily_emergency += 1
+
         total = len(all_items)
         emergency_count = sum(1 for a in all_items if a.visit_type == "emergency" or a.token_number.startswith("EMG"))
         waiting_count = sum(1 for a in all_items if a.status in ["checked_in", "booked", "scheduled"])
@@ -1050,13 +1149,37 @@ class AppointmentService:
 
         return {
             "analytics": {
-                "total_tokens_today": total,
-                "emergency_tokens_today": emergency_count,
+                "period": period,
+                "target_date": str(t_date),
+                "total_tokens_filtered": total,
+                "daily": {
+                    "total": daily_tokens,
+                    "completed": daily_completed,
+                    "emergency": daily_emergency,
+                    "active_waiting": waiting_count if period == "daily" else sum(1 for a in all_items if a.status in ["checked_in", "booked"]),
+                },
+                "monthly": {
+                    "total": monthly_tokens,
+                    "completed": monthly_completed,
+                    "emergency": monthly_emergency,
+                    "month_name": today.strftime("%B %Y"),
+                },
+                "yearly": {
+                    "total": yearly_tokens,
+                    "completed": yearly_completed,
+                    "emergency": yearly_emergency,
+                    "year": str(today.year),
+                },
+                "monthly_trend": list(monthly_trend_map.values()),
+                "departments": sorted(list(dept_map.values()), key=lambda x: x["total"], reverse=True),
+                # Backward-compatibility fields
+                "total_tokens_today": daily_tokens,
+                "emergency_tokens_today": daily_emergency,
                 "emergency_active_waiting": emergency_active,
                 "waiting_lobby": waiting_count,
                 "in_consultation": in_consultation_count,
                 "completed_consultations": completed_count,
-                "regular_tokens_today": total - emergency_count,
+                "regular_tokens_today": daily_tokens - daily_emergency,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             },
             "tokens": formatted_tokens

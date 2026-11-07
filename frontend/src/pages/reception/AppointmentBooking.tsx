@@ -42,7 +42,9 @@ import {
   Building2,
   BadgePercent,
   CheckCheck,
-  Tag
+  Tag,
+  Tv,
+  ExternalLink,
 } from 'lucide-react';
 import { Patient, Doctor } from '@/types';
 import { cleanDoctorName, formatDoctorName } from '@/lib/utils';
@@ -388,6 +390,16 @@ const AppointmentBookingContent = () => {
           description="High-speed walk-in queue token dispensing, smart returning patient auto-detection, and advance slot scheduling."
         />
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open('/queue/display', '_blank', 'noopener,noreferrer')}
+            className="text-xs gap-1.5 rounded-xl border-stone-300 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 font-semibold"
+          >
+            <Tv className="w-3.5 h-3.5 text-teal-600" />
+            <span>Open Waiting Room TV</span>
+            <ExternalLink className="w-3 h-3 opacity-60 ml-0.5" />
+          </Button>
           <Button
             variant="outline"
             size="sm"

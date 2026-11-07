@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
-import { Users, CreditCard, Calendar as CalendarIcon, Activity } from 'lucide-react';
+import { Users, CreditCard, Calendar as CalendarIcon, Activity, Tv, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatDoctorName } from '@/lib/utils';
 
@@ -117,9 +117,19 @@ const ReceptionDashboardContent = () => {
           <CardHeader>
             <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          <CardContent className="flex flex-col gap-3">
+             <Button 
+               onClick={() => window.open('/queue/display', '_blank', 'noopener,noreferrer')} 
+               className="w-full justify-between bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 border border-teal-200 dark:border-teal-800" 
+               variant="outline"
+             >
+                <span className="flex items-center gap-2">
+                  <Tv className="h-4 w-4 text-teal-600" /> Open Waiting Room TV
+                </span>
+                <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+             </Button>
              <Button onClick={() => navigate('/reception/queue')} className="w-full justify-start" variant="outline">
-                <Activity className="mr-2 h-4 w-4" /> Go to Live Queue
+                <Activity className="mr-2 h-4 w-4" /> Go to Live Queue Board
              </Button>
              <Button onClick={() => navigate('/reception/billing')} className="w-full justify-start" variant="outline">
                 <CreditCard className="mr-2 h-4 w-4" /> Process Billing

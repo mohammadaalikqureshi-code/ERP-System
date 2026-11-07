@@ -10,7 +10,7 @@ import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { useToast } from '@/components/ui/use-toast';
-import { Clock, UserCircle, Play, CheckCircle, SkipForward } from 'lucide-react';
+import { Clock, UserCircle, Play, CheckCircle, SkipForward, Tv, ExternalLink } from 'lucide-react';
 import { Appointment, Doctor } from '@/types';
 import { formatDoctorName } from '@/lib/utils';
 
@@ -80,20 +80,33 @@ const QueueManagementContent = () => {
             </span>
           )}
         </div>
-        <div className="w-64">
-          <Select value={selectedDoctorId} onValueChange={setSelectedDoctorId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Filter by Doctor" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Doctors</SelectItem>
-              {doctors?.map((doc: Doctor) => (
-                <SelectItem key={doc.id} value={doc.id}>
-                  {formatDoctorName(doc.fullName || `${doc.firstName} ${doc.lastName || ''}`)} (Series {doc.tokenPrefix || doc.token_prefix || 'A'})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open('/queue/display', '_blank', 'noopener,noreferrer')}
+            className="text-xs font-semibold gap-1.5 h-10 px-3 bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-300 hover:bg-teal-100"
+          >
+            <Tv className="w-4 h-4 text-teal-600" />
+            <span>Open Waiting Room TV</span>
+            <ExternalLink className="w-3.5 h-3.5 opacity-60 ml-0.5" />
+          </Button>
+
+          <div className="w-64">
+            <Select value={selectedDoctorId} onValueChange={setSelectedDoctorId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by Doctor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Doctors</SelectItem>
+                {doctors?.map((doc: Doctor) => (
+                  <SelectItem key={doc.id} value={doc.id}>
+                    {formatDoctorName(doc.fullName || `${doc.firstName} ${doc.lastName || ''}`)} (Series {doc.tokenPrefix || doc.token_prefix || 'A'})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 

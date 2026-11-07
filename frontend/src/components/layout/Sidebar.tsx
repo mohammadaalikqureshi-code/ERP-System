@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
+  ExternalLink,
   KeyRound,
   LayoutDashboard,
   ListOrdered,
@@ -18,6 +19,7 @@ import {
   Settings,
   Shield,
   SlidersHorizontal,
+  Tv,
   UserCog,
   Users,
 } from 'lucide-react';
@@ -31,12 +33,14 @@ import { Button } from '@/components/ui/button';
 /**
  * A navigation entry. `panel` ties the link to a switchable panel — if the
  * clinic has that panel turned off, the link is not rendered at all.
+ * `newTab` opens the link in an independent browser tab/page.
  */
 interface NavItem {
   icon: typeof LayoutDashboard;
   label: string;
   path: string;
   panel?: string;
+  newTab?: boolean;
 }
 
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
@@ -45,19 +49,23 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
     { icon: Users, label: 'Patients', path: '/reception/patients', panel: 'reception' },
     { icon: Calendar, label: 'Appointments', path: '/reception/appointments', panel: 'reception' },
     { icon: ListOrdered, label: 'Queue', path: '/reception/queue', panel: 'reception' },
+    { icon: Tv, label: 'Waiting Room TV', path: '/queue/display', panel: 'reception', newTab: true },
     { icon: Receipt, label: 'Billing', path: '/reception/billing', panel: 'reception' },
   ],
   nurse: [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/reception', panel: 'reception' },
     { icon: ListOrdered, label: 'Queue', path: '/reception/queue', panel: 'reception' },
+    { icon: Tv, label: 'Waiting Room TV', path: '/queue/display', panel: 'reception', newTab: true },
   ],
   doctor: [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/doctor', panel: 'doctor' },
     { icon: CalendarDays, label: 'Schedule & Leaves', path: '/doctor/schedule', panel: 'doctor' },
+    { icon: Tv, label: 'Waiting Room TV', path: '/queue/display', panel: 'doctor', newTab: true },
   ],
   super_admin: [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin' },
     { icon: Radio, label: 'Live Token Control', path: '/admin/tokens' },
+    { icon: Tv, label: 'Waiting Room TV', path: '/queue/display', newTab: true },
     { icon: Building2, label: 'Clinics', path: '/admin/clinics' },
     { icon: UserCog, label: 'Doctors', path: '/admin/doctors' },
     { icon: Users, label: 'Staff', path: '/admin/staff' },
@@ -72,6 +80,7 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
   clinic_admin: [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin' },
     { icon: Radio, label: 'Live Token Control', path: '/admin/tokens' },
+    { icon: Tv, label: 'Waiting Room TV', path: '/queue/display', newTab: true },
     { icon: Building2, label: 'Clinics', path: '/admin/clinics' },
     { icon: UserCog, label: 'Doctors', path: '/admin/doctors' },
     { icon: Users, label: 'Staff', path: '/admin/staff' },
@@ -83,7 +92,10 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
   ],
   pharmacist: [{ icon: LayoutDashboard, label: 'Inventory', path: '/inventory', panel: 'inventory' }],
   lab_staff: [{ icon: LayoutDashboard, label: 'Lab Dashboard', path: '/lab', panel: 'lab' }],
-  patient: [{ icon: LayoutDashboard, label: 'Dashboard', path: '/patient/dashboard' }],
+  patient: [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/patient/dashboard' },
+    { icon: Tv, label: 'Waiting Room TV', path: '/queue/display', newTab: true },
+  ],
 };
 
 export const Sidebar: React.FC = () => {
@@ -143,22 +155,41 @@ export const Sidebar: React.FC = () => {
               const Icon = item.icon;
               return (
                 <li key={`${item.path}-${item.label}`}>
-                  <NavLink
-                    to={item.path}
-                    end={item.path.split('/').length <= 2}
-                    className={({ isActive }) =>
-                      cn(
-                        'flex items-center rounded-md px-3 py-2.5 transition-colors',
-                        isActive
-                          ? 'bg-teal-600/10 text-teal-400'
-                          : 'hover:bg-stone-800 hover:text-white'
-                      )
-                    }
-                    onClick={() => window.innerWidth < 768 && setSidebarOpen(false)}
-                  >
-                    <Icon className="h-5 w-5 flex-shrink-0" />
-                    {sidebarOpen && <span className="ml-3 truncate">{item.label}</span>}
-                  </NavLink>
+                  {item.newTab ? (
+                    <a
+                      href={item.path}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center rounded-md px-3 py-2.5 transition-colors hover:bg-stone-800 hover:text-white text-stone-300 group"
+                      onClick={() => window.innerWidth < 768 && setSidebarOpen(false)}
+                      title={`${item.label} (Opens in New Tab)`}
+                    >
+                      <Icon className="h-5 w-5 flex-shrink-0 text-teal-400 group-hover:scale-110 transition-transform" />
+                      {sidebarOpen && (
+                        <div className="ml-3 flex items-center justify-between flex-1 truncate">
+                          <span className="truncate">{item.label}</span>
+                          <ExternalLink className="h-3.5 w-3.5 text-stone-500 group-hover:text-teal-400 ml-1.5 flex-shrink-0" />
+                        </div>
+                      )}
+                    </a>
+                  ) : (
+                    <NavLink
+                      to={item.path}
+                      end={item.path.split('/').length <= 2}
+                      className={({ isActive }) =>
+                        cn(
+                          'flex items-center rounded-md px-3 py-2.5 transition-colors',
+                          isActive
+                            ? 'bg-teal-600/10 text-teal-400'
+                            : 'hover:bg-stone-800 hover:text-white'
+                        )
+                      }
+                      onClick={() => window.innerWidth < 768 && setSidebarOpen(false)}
+                    >
+                      <Icon className="h-5 w-5 flex-shrink-0" />
+                      {sidebarOpen && <span className="ml-3 truncate">{item.label}</span>}
+                    </NavLink>
+                  )}
                 </li>
               );
             })}

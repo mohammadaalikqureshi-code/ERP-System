@@ -12,7 +12,7 @@ import api from '@/api/client';
 import { 
   Search, FileText, FlaskConical, Pill, Receipt, Calendar, 
   Download, ArrowLeft, HeartPulse, User, Phone, CheckCircle2, 
-  AlertTriangle, AlertCircle, Sparkles, Loader2, Hospital 
+  AlertTriangle, AlertCircle, Sparkles, Loader2, Hospital, ExternalLink 
 } from 'lucide-react';
 
 export default function PatientReportsPage() {
@@ -111,11 +111,11 @@ export default function PatientReportsPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Link to="/queue">
+          <a href="/queue/display" target="_blank" rel="noopener noreferrer">
             <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-              <Hospital className="h-4 w-4" /> Live Queue Screen
+              <Hospital className="h-4 w-4 text-teal-600" /> Live Queue Screen <ExternalLink className="h-3 w-3 opacity-60" />
             </Button>
-          </Link>
+          </a>
           <Link to="/login">
             <Button variant="outline" size="sm" className="gap-1.5 text-xs">
               <User className="h-4 w-4" /> Staff Sign In

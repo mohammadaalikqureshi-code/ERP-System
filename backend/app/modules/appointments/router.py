@@ -88,6 +88,7 @@ async def get_admin_live_tokens_endpoint(
     visitType: str = None,
     targetDate: str = None,
     search: str = None,
+    period: str = "daily",
     db: AsyncSession = Depends(get_db),
     clinic_id: uuid.UUID = Depends(get_clinic_scope)
 ):
@@ -97,7 +98,8 @@ async def get_admin_live_tokens_endpoint(
         status=status,
         visit_type=visitType,
         target_date=targetDate,
-        search=search
+        search=search,
+        period=period
     )
 
 @router.post("/admin/boost-emergency/{id}", dependencies=[Depends(require_permission("appointments.update"))])

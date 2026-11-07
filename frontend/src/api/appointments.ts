@@ -149,6 +149,7 @@ export interface AdminTokenFilters {
   visitType?: string;
   targetDate?: string;
   search?: string;
+  period?: 'daily' | 'monthly' | 'yearly' | 'all';
 }
 
 export const useAdminLiveTokens = (filters: AdminTokenFilters = {}) => {
@@ -162,6 +163,7 @@ export const useAdminLiveTokens = (filters: AdminTokenFilters = {}) => {
           visitType: filters.visitType || undefined,
           targetDate: filters.targetDate || undefined,
           search: filters.search || undefined,
+          period: filters.period || 'daily',
         },
       });
       return data;
