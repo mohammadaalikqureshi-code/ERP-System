@@ -89,7 +89,7 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const checkServerStatus = async (targetUrl?: string) => {
+  const checkServerStatus = async (targetUrl?: string, retryCount = 0) => {
     const raw = (targetUrl || serverUrlInput || API_BASE_URL).trim().replace(/\/+$/, '');
     const cleanUrl = raw.includes('/api/v1') ? raw : `${raw}/api/v1`;
     setIsTestingServer(true);
@@ -100,17 +100,20 @@ export const LoginPage: React.FC = () => {
       clearTimeout(timeoutId);
       if (res.ok) {
         setServerStatus('online');
-      } else {
-        setServerStatus('offline');
+        setIsTestingServer(false);
+        return;
       }
-    } catch (err: any) {
-      if (err?.name === 'AbortError') {
-        // Cold start in progress
-        setServerStatus('cold_start');
-      } else {
-        setServerStatus('offline');
-      }
-    } finally {
+    } catch {
+      // Continue polling while server starts up
+    }
+
+    if (retryCount < 8) {
+      setServerStatus('cold_start');
+      setTimeout(() => {
+        checkServerStatus(targetUrl, retryCount + 1);
+      }, 3000);
+    } else {
+      setServerStatus('offline');
       setIsTestingServer(false);
     }
   };
@@ -172,10 +175,29 @@ export const LoginPage: React.FC = () => {
         localStorage.removeItem('medicare_remember_identifier');
       }
 
-      const response = await apiClient.post('/auth/login', {
-        emailOrPhone: data.identifier,
-        password: data.password,
-      });
+      let response;
+      try {
+        response = await apiClient.post('/auth/login', {
+          emailOrPhone: data.identifier,
+          password: data.password,
+        });
+      } catch (firstErr: any) {
+        const isNetwork = !firstErr?.response || firstErr?.code === 'ECONNABORTED' || firstErr?.message?.includes('timeout') || firstErr?.message === 'Network Error';
+        if (isNetwork) {
+          toast({
+            title: 'Waking Up Cloud Server ⚡',
+            description: 'Connecting to MediCare backend... logging you in automatically in a few seconds.',
+          });
+          // Wait 3.5 seconds and retry automatically
+          await new Promise((r) => setTimeout(r, 3500));
+          response = await apiClient.post('/auth/login', {
+            emailOrPhone: data.identifier,
+            password: data.password,
+          });
+        } else {
+          throw firstErr;
+        }
+      }
       const resData = response.data || {};
       const accessToken = resData.accessToken || resData.token || '';
       const profile = resData.profile || resData.user || {};
